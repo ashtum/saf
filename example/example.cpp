@@ -1,3 +1,7 @@
+// Copyright (c) 2022 Mohammad nejati
+//
+// Distributed under the Boost Software License, Version 1.0
+
 #include <saf.hpp>
 
 #include <boost/asio.hpp>
@@ -33,9 +37,9 @@ asio::awaitable<void> async_main()
 
 int main()
 {
-    auto io_context = asio::io_context{};
+    auto ctx = asio::io_context{};
 
-    asio::co_spawn(io_context, async_main(), asio::detached);
+    asio::co_spawn(ctx, async_main(), asio::detached);
 
-    io_context.run();
+    ctx.run();
 }

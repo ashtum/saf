@@ -1,6 +1,6 @@
 // Copyright (c) 2022 Mohammad nejati, Klemens D. Morgenstern, Ricahrd Hodges
 //
-// Distributed under the Boost Software License, Version 1.0.
+// Distributed under the Boost Software License, Version 1.0
 
 #pragma once
 
@@ -68,7 +68,7 @@ inline const std::error_category& future_category()
     return category;
 };
 
-std::error_code make_error_code(future_errc e)
+inline std::error_code make_error_code(future_errc e)
 {
     return { static_cast<int>(e), future_category() };
 }
@@ -116,10 +116,10 @@ struct bilist_node
 
     void link_before(bilist_node* next) noexcept
     {
-        next_ = next;
-        prev_ = next->prev_;
+        next_        = next;
+        prev_        = next->prev_;
         prev_->next_ = this;
-        next->prev_ = this;
+        next->prev_  = this;
     }
 };
 
@@ -127,33 +127,41 @@ class service_member : public bilist_node
 {
   public:
     virtual void shutdown() noexcept = 0;
-    virtual ~service_member() = default;
+    virtual ~service_member()        = default;
 };
 
-class dummy_lock
+template<bool IsMT>
+class locking_strategy
 {
-  public:
-    auto internal_lock()
+    struct null_mutex
     {
-        return [] {};
+        void lock()
+        {
+        }
+
+        void unlock() noexcept
+        {
+        }
+
+        bool try_lock()
+        {
+            return true;
+        }
+    };
+
+    std::conditional_t<IsMT, std::mutex, null_mutex> mutex_;
+
+  public:
+    auto internal_lock() noexcept
+    {
+        return std::lock_guard{ mutex_ };
     }
 };
 
-class mutex_lock
-{
-    std::mutex mutex_;
-
-  public:
-    auto internal_lock()
-    {
-        return std::lock_guard<std::mutex>{ mutex_ };
-    }
-};
-
-template<bool Multithread>
+template<bool IsMT>
 class service final
-    : private std::conditional_t<Multithread, mutex_lock, dummy_lock>
-    , public net::detail::execution_context_service_base<service<Multithread>>
+    : public locking_strategy<IsMT>
+    , public net::detail::execution_context_service_base<service<IsMT>>
 {
     bilist_node entries_;
 
@@ -165,19 +173,19 @@ class service final
 
     void register_queue(bilist_node* sm) noexcept
     {
-        [[maybe_unused]] auto lg = this->internal_lock();
+        auto lg = this->internal_lock();
         sm->link_before(&entries_);
     }
 
     void unregister_queue(bilist_node* sm) noexcept
     {
-        [[maybe_unused]] auto lg = this->internal_lock();
+        auto lg = this->internal_lock();
         sm->unlink();
     }
 
     void shutdown() noexcept override
     {
-        auto e = std::move(entries_);
+        auto e  = std::move(entries_);
         auto nx = e.next_;
         while (nx != &e)
         {
@@ -190,9 +198,9 @@ class service final
 
 struct wait_op : bilist_node
 {
-    virtual void shutdown() noexcept = 0;
+    virtual void shutdown() noexcept                 = 0;
     virtual void complete(boost::system::error_code) = 0;
-    virtual ~wait_op() = default;
+    virtual ~wait_op()                               = default;
 };
 
 template<class Executor, class Handler>
@@ -215,10 +223,10 @@ class wait_op_model final : public wait_op
 
     static wait_op_model* construct(Executor e, Handler handler)
     {
-        auto halloc = net::get_associated_allocator(handler);
-        auto alloc = typename std::allocator_traits<decltype(halloc)>::template rebind_alloc<wait_op_model>(halloc);
+        auto halloc  = net::get_associated_allocator(handler);
+        auto alloc   = typename std::allocator_traits<decltype(halloc)>::template rebind_alloc<wait_op_model>(halloc);
         using traits = std::allocator_traits<decltype(alloc)>;
-        auto pmem = traits::allocate(alloc, 1);
+        auto pmem    = traits::allocate(alloc, 1);
 
         try
         {
@@ -257,28 +265,28 @@ class wait_op_model final : public wait_op
     }
 };
 
-template<typename T, typename Executor, bool Multithread>
+template<typename T, typename Executor, bool IsMT>
 class state final
-    : public std::conditional_t<Multithread, mutex_lock, dummy_lock>
-    , service_member
+    : public locking_strategy<IsMT>
+    , public service_member
 {
-    service<Multithread>* service_;
     Executor exec_;
+    service<IsMT>* service_;
     bilist_node waiters_;
     std::variant<std::monostate, std::exception_ptr, std::conditional_t<std::is_void_v<T>, std::monostate, T>> value_;
 
   public:
     explicit state(Executor e)
-        : service_{ &net::use_service<service<Multithread>>(net::query(e, net::execution::context)) }
-        , exec_{ std::move(e) }
+        : exec_{ std::move(e) }
+        , service_{ &net::use_service<service<IsMT>>({ net::query(exec_, net::execution::context) }) }
     {
         service_->register_queue(this);
     }
 
-    state(const state&) = delete;
+    state(const state&)            = delete;
     state& operator=(const state&) = delete;
 
-    state(state&&) = delete;
+    state(state&&)            = delete;
     state& operator=(state&&) = delete;
 
     [[nodiscard]] Executor get_executor() const
@@ -364,9 +372,9 @@ class state final
                     return net::post(std::move(e), net::append(std::move(handler), boost::system::error_code{}));
 
                 using handler_type = std::decay_t<decltype(handler)>;
-                using model_type = wait_op_model<decltype(e), handler_type>;
-                model_type* model = model_type ::construct(std::move(e), std::forward<decltype(handler)>(handler));
-                auto slot = model->get_cancellation_slot();
+                using model_type   = wait_op_model<decltype(e), handler_type>;
+                model_type* model  = model_type ::construct(std::move(e), std::forward<decltype(handler)>(handler));
+                auto slot          = model->get_cancellation_slot();
                 if (slot.is_connected())
                 {
                     slot.assign(
@@ -374,7 +382,7 @@ class state final
                         {
                             if (type != net::cancellation_type::none)
                             {
-                                [[maybe_unused]] auto lg = this->internal_lock();
+                                auto lg = this->internal_lock();
                                 model->complete(net::error::operation_aborted);
                             }
                         });
@@ -404,15 +412,15 @@ class state final
     }
 };
 
-template<typename T, typename Executor, bool Multithread>
+template<typename T, typename Executor, bool IsMT>
 class shared_future
 {
-    std::shared_ptr<state<T, Executor, Multithread>> state_;
+    std::shared_ptr<state<T, Executor, IsMT>> state_;
 
   public:
     shared_future() = default;
 
-    explicit shared_future(std::shared_ptr<state<T, Executor, Multithread>> state) noexcept
+    explicit shared_future(std::shared_ptr<state<T, Executor, IsMT>> state) noexcept
         : state_{ std::move(state) }
     {
     }
@@ -435,7 +443,7 @@ class shared_future
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        [[maybe_unused]] auto lg = state_->internal_lock();
+        auto lg = state_->internal_lock();
 
         return state_->is_ready();
     }
@@ -445,7 +453,7 @@ class shared_future
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        [[maybe_unused]] auto lg = state_->internal_lock();
+        auto lg = state_->internal_lock();
 
         return std::as_const(*state_).get();
     }
@@ -456,29 +464,29 @@ class shared_future
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        [[maybe_unused]] auto lg = state_->internal_lock();
+        auto lg = state_->internal_lock();
 
         return state_->async_wait(std::forward<CompletionToken>(token));
     }
 };
 
-template<typename T, typename Executor, bool Multithread>
+template<typename T, typename Executor, bool IsMT>
 class future
 {
-    std::shared_ptr<state<T, Executor, Multithread>> state_;
+    std::shared_ptr<state<T, Executor, IsMT>> state_;
 
   public:
     future() = default;
 
-    explicit future(std::shared_ptr<state<T, Executor, Multithread>> state) noexcept
+    explicit future(std::shared_ptr<state<T, Executor, IsMT>> state) noexcept
         : state_{ std::move(state) }
     {
     }
 
-    future(const future&) = delete;
+    future(const future&)            = delete;
     future& operator=(const future&) = delete;
 
-    future(future&&) = default;
+    future(future&&)            = default;
     future& operator=(future&&) = default;
 
     [[nodiscard]] Executor get_executor() const
@@ -499,7 +507,7 @@ class future
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        [[maybe_unused]] auto lg = state_->internal_lock();
+        auto lg = state_->internal_lock();
 
         return state_->is_ready();
     }
@@ -509,14 +517,14 @@ class future
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        [[maybe_unused]] auto lg = state_->internal_lock();
+        auto lg = state_->internal_lock();
 
         return state_->get();
     }
 
-    [[nodiscard]] shared_future<T, Executor, Multithread> share() noexcept
+    [[nodiscard]] shared_future<T, Executor, IsMT> share() noexcept
     {
-        return shared_future<T, Executor, Multithread>{ std::move(state_) };
+        return shared_future<T, Executor, IsMT>{ std::move(state_) };
     }
 
     template<typename CompletionToken>
@@ -525,36 +533,48 @@ class future
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        [[maybe_unused]] auto lg = state_->internal_lock();
+        auto lg = state_->internal_lock();
 
         return state_->async_wait(std::forward<CompletionToken>(token));
     }
 };
 
-template<typename T, typename Executor, bool Multithread>
+template<typename T, typename Executor, bool IsMT>
 class promise
 {
-    std::shared_ptr<state<T, Executor, Multithread>> state_;
+    std::shared_ptr<state<T, Executor, IsMT>> state_;
     bool retrieved_{ false };
 
   public:
     promise() = default;
 
     explicit promise(Executor exec)
-        : state_{ std::make_shared<state<T, Executor, Multithread>>(std::move(exec)) }
+        : state_{ std::make_shared<state<T, Executor, IsMT>>(std::move(exec)) }
+    {
+    }
+
+    template<typename ExecutionContext>
+    explicit promise(ExecutionContext& ctx, std::enable_if_t<std::is_convertible_v<ExecutionContext&, net::execution_context&>>* = nullptr)
+        : promise{ ctx.get_executor() }
     {
     }
 
     template<typename Alloc>
     promise(Executor exec, const Alloc& alloc)
-        : state_{ std::allocate_shared<state<T, Executor, Multithread>, Alloc>(alloc, std::move(exec)) }
+        : state_{ std::allocate_shared<state<T, Executor, IsMT>, Alloc>(alloc, std::move(exec)) }
     {
     }
 
-    promise(const promise&) = delete;
+    template<typename ExecutionContext, typename Alloc>
+    explicit promise(ExecutionContext& ctx, const Alloc& alloc, std::enable_if_t<std::is_convertible_v<ExecutionContext&, net::execution_context&>>* = nullptr)
+        : promise{ ctx.get_executor(), alloc }
+    {
+    }
+
+    promise(const promise&)            = delete;
     promise& operator=(const promise&) = delete;
 
-    promise(promise&&) = default;
+    promise(promise&&)            = default;
     promise& operator=(promise&&) = default;
 
     [[nodiscard]] Executor get_executor() const
@@ -565,13 +585,18 @@ class promise
         return state_->get_executor();
     }
 
+    [[nodiscard]] bool is_valid() const noexcept
+    {
+        return !!state_;
+    }
+
     template<typename... Args>
     void set_value(Args&&... args)
     {
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        [[maybe_unused]] auto lg = state_->internal_lock();
+        auto lg = state_->internal_lock();
 
         state_->set_value(std::forward<Args>(args)...);
     }
@@ -581,12 +606,12 @@ class promise
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        [[maybe_unused]] auto lg = state_->internal_lock();
+        auto lg = state_->internal_lock();
 
         state_->set_exception(exception_ptr);
     }
 
-    [[nodiscard]] future<T, Executor, Multithread> get_future()
+    [[nodiscard]] future<T, Executor, IsMT> get_future()
     {
         if (std::exchange(retrieved_, true))
             throw future_error{ future_errc::future_already_retrieved };
@@ -594,14 +619,14 @@ class promise
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        return future<T, Executor, Multithread>{ state_ };
+        return future<T, Executor, IsMT>{ state_ };
     }
 
     ~promise()
     {
         if (state_)
         {
-            [[maybe_unused]] auto lg = state_->internal_lock();
+            auto lg = state_->internal_lock();
             if (!state_->is_ready())
                 state_->set_exception(std::make_exception_ptr(future_error{ future_errc::broken_promise }));
         }
