@@ -1,6 +1,6 @@
-// Copyright (c) 2022 Mohammad nejati
-//
-// Distributed under the Boost Software License, Version 1.0
+// Copyright (c) 2022 Mohammad Nejati
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt)
 
 #include <saf.hpp>
 
@@ -151,7 +151,7 @@ BOOST_AUTO_TEST_CASE(async_wait_set_value)
     BOOST_CHECK_EQUAL(sh_future_2.get(), 54);
 }
 
-BOOST_AUTO_TEST_CASE(async_wait_set_value_exception)
+BOOST_AUTO_TEST_CASE(async_wait_set_exception)
 {
     auto ctx         = asio::io_context{};
     auto promise     = st::promise<int>{ ctx };

@@ -1,21 +1,36 @@
-// Copyright (c) 2022 Mohammad nejati, Klemens D. Morgenstern, Ricahrd Hodges
-//
-// Distributed under the Boost Software License, Version 1.0
+// Copyright (c) 2022 Mohammad Nejati, Klemens D. Morgenstern, Ricahrd Hodges
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt)
 
 #pragma once
-
-#include <boost/asio/any_io_executor.hpp>
-#include <boost/asio/append.hpp>
-#include <boost/asio/associated_cancellation_slot.hpp>
-#include <boost/asio/post.hpp>
 
 #include <mutex>
 #include <variant>
 
+#ifdef SAF_ASIO_STANDALONE
+#include <asio/any_io_executor.hpp>
+#include <asio/append.hpp>
+#include <asio/associated_cancellation_slot.hpp>
+#include <asio/post.hpp>
 namespace saf
 {
-namespace net = boost::asio;
+namespace net    = asio;
+using error_code = std::error_code;
+} // namespace saf
+#else
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/append.hpp>
+#include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/post.hpp>
+namespace saf
+{
+namespace net    = boost::asio;
+using error_code = boost::system::error_code;
+} // namespace saf
+#endif
 
+namespace saf
+{
 enum class future_errc
 {
     no_state = 1,
@@ -198,9 +213,9 @@ class service final
 
 struct wait_op : bilist_node
 {
-    virtual void shutdown() noexcept                 = 0;
-    virtual void complete(boost::system::error_code) = 0;
-    virtual ~wait_op()                               = default;
+    virtual void shutdown() noexcept  = 0;
+    virtual void complete(error_code) = 0;
+    virtual ~wait_op()                = default;
 };
 
 template<class Executor, class Handler>
@@ -247,7 +262,7 @@ class wait_op_model final : public wait_op
         traits.deallocate(alloc, self, 1);
     }
 
-    virtual void complete(boost::system::error_code ec)
+    virtual void complete(error_code ec)
     {
         get_cancellation_slot().clear();
         auto g = std::move(work_guard_);
@@ -363,13 +378,13 @@ class state final
     template<typename CompletionToken>
     auto async_wait(CompletionToken&& token)
     {
-        return net::async_initiate<decltype(token), void(boost::system::error_code)>(
+        return net::async_initiate<decltype(token), void(error_code)>(
             [this](auto handler)
             {
                 auto e = get_associated_executor(handler, exec_);
 
                 if (is_ready())
-                    return net::post(std::move(e), net::append(std::move(handler), boost::system::error_code{}));
+                    return net::post(std::move(e), net::append(std::move(handler), error_code{}));
 
                 using handler_type = std::decay_t<decltype(handler)>;
                 using model_type   = wait_op_model<decltype(e), handler_type>;
@@ -392,7 +407,7 @@ class state final
             token);
     }
 
-    void complete_all(boost::system::error_code ec)
+    void complete_all(error_code ec)
     {
         auto& nx = waiters_.next_;
         while (nx != &waiters_)

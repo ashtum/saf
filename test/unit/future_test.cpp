@@ -1,6 +1,6 @@
-// Copyright (c) 2022 Mohammad nejati
-//
-// Distributed under the Boost Software License, Version 1.0
+// Copyright (c) 2022 Mohammad Nejati
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt)
 
 #include <saf.hpp>
 
@@ -137,7 +137,7 @@ BOOST_AUTO_TEST_CASE(async_wait_set_value)
     BOOST_CHECK_EQUAL(future.get(), 54);
 }
 
-BOOST_AUTO_TEST_CASE(async_wait_set_value_exception)
+BOOST_AUTO_TEST_CASE(async_wait_set_exception)
 {
     auto ctx     = asio::io_context{};
     auto promise = st::promise<int>{ ctx };
@@ -182,17 +182,17 @@ BOOST_AUTO_TEST_CASE(async_wait_cancellation)
 
 BOOST_AUTO_TEST_CASE(async_wait_shutdown)
 {
-    auto future  = std::make_shared<st::future<void>>();
-    auto promise = std::make_shared<st::promise<void>>();
+    auto promise = st::promise<void>{};
+    auto obj     = std::make_shared<int>();
     {
-        auto ctx = asio::io_context{};
-        *promise = st::promise<void>{ ctx };
-        *future  = promise->get_future();
-        BOOST_CHECK_EQUAL(future.use_count(), 1);
-        future->async_wait([future](auto) {});
-        BOOST_CHECK_EQUAL(future.use_count(), 2);
+        auto ctx    = asio::io_context{};
+        promise     = st::promise<void>{ ctx };
+        auto future = promise.get_future();
+        BOOST_CHECK_EQUAL(obj.use_count(), 1);
+        future.async_wait([obj](auto) {});
+        BOOST_CHECK_EQUAL(obj.use_count(), 2);
     }
-    BOOST_CHECK_EQUAL(future.use_count(), 1);
+    BOOST_CHECK_EQUAL(obj.use_count(), 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
