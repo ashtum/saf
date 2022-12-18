@@ -108,8 +108,8 @@ class promise
     promise(const promise&)            = delete;
     promise& operator=(const promise&) = delete;
 
-    promise(promise&&)            = default;
-    promise& operator=(promise&&) = default;
+    promise(promise&&) noexcept            = default;
+    promise& operator=(promise&&) noexcept = default;
 
     /// Gets the executor associated with the object.
     /**
@@ -202,8 +202,8 @@ class future
     future(const future&)            = delete;
     future& operator=(const future&) = delete;
 
-    future(future&&)            = default;
-    future& operator=(future&&) = default;
+    future(future&&) noexcept            = default;
+    future& operator=(future&&) noexcept = default;
 
     /// Gets the executor associated with the object.
     /**

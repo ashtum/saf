@@ -123,7 +123,7 @@ struct bilist_node
             prev_->next_ = this;
     }
 
-    void unlink() noexcept
+    void unlink() const noexcept
     {
         next_->prev_ = prev_;
         prev_->next_ = next_;
@@ -200,11 +200,11 @@ class service final
 
     void shutdown() noexcept override
     {
-        auto e  = std::move(entries_);
-        auto nx = e.next_;
+        auto e   = std::move(entries_);
+        auto* nx = e.next_;
         while (nx != &e)
         {
-            auto nnx = nx->next_;
+            auto* nnx = nx->next_;
             static_cast<service_member*>(nx)->shutdown();
             e.next_ = nx = nnx;
         }
@@ -266,7 +266,7 @@ class wait_op_model final : public wait_op
         traits.deallocate(alloc, self, 1);
     }
 
-    virtual void complete(error_code ec)
+    void complete(error_code ec) override
     {
         get_cancellation_slot().clear();
         auto g = std::move(work_guard_);
@@ -276,7 +276,7 @@ class wait_op_model final : public wait_op
         net::post(g.get_executor(), net::append(std::move(h), ec));
     }
 
-    virtual void shutdown() noexcept
+    void shutdown() noexcept override
     {
         get_cancellation_slot().clear();
         this->unlink();
@@ -426,7 +426,7 @@ class state final
             static_cast<wait_op*>(nx)->complete(ec);
     }
 
-    ~state()
+    ~state() override
     {
         service_->unregister_queue(this);
     }
@@ -595,8 +595,8 @@ class future
     future(const future&)            = delete;
     future& operator=(const future&) = delete;
 
-    future(future&&)            = default;
-    future& operator=(future&&) = default;
+    future(future&&) noexcept            = default;
+    future& operator=(future&&) noexcept = default;
 
     /// Gets the executor associated with the object.
     /**
@@ -802,8 +802,8 @@ class promise
     promise(const promise&)            = delete;
     promise& operator=(const promise&) = delete;
 
-    promise(promise&&)            = default;
-    promise& operator=(promise&&) = default;
+    promise(promise&&) noexcept            = default;
+    promise& operator=(promise&&) noexcept = default;
 
     /// Gets the executor associated with the object.
     /**
