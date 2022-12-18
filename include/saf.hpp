@@ -318,7 +318,7 @@ class state final
         return exec_;
     }
 
-    [[nodiscard]] bool is_ready() const
+    [[nodiscard]] bool is_ready() const noexcept
     {
         return value_.index() != 0;
     }
@@ -330,6 +330,16 @@ class state final
             throw future_error{ future_errc::promise_already_satisfied };
 
         value_.template emplace<2>(std::forward<Args>(args)...);
+
+        complete_all({});
+    }
+
+    void set_exception(std::exception_ptr exception_ptr)
+    {
+        if (is_ready())
+            throw future_error{ future_errc::promise_already_satisfied };
+
+        value_.template emplace<1>(exception_ptr);
 
         complete_all({});
     }
@@ -372,16 +382,6 @@ class state final
         }
 
         std::rethrow_exception(std::get<1>(value_));
-    }
-
-    void set_exception(std::exception_ptr exception_ptr)
-    {
-        if (is_ready())
-            throw future_error{ future_errc::promise_already_satisfied };
-
-        value_.template emplace<1>(exception_ptr);
-
-        complete_all({});
     }
 
     template<typename CompletionToken>
@@ -428,12 +428,14 @@ class state final
 
     ~state() override
     {
-        service_->unregister_queue(this);
+        if (service_)
+            service_->unregister_queue(this);
     }
 
   private:
     void shutdown() noexcept override
     {
+        service_ = nullptr;
         auto& nx = waiters_.next_;
         while (nx != &waiters_)
             static_cast<wait_op*>(nx)->shutdown();
