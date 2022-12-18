@@ -10,20 +10,19 @@
 BOOST_AUTO_TEST_SUITE(shared_future)
 
 namespace asio = boost::asio;
-using st       = saf::st;
 
 BOOST_AUTO_TEST_CASE(is_valid)
 {
     auto ctx = asio::io_context{};
 
-    auto sh_future = st::promise<void>{ ctx }.get_future().share();
+    auto sh_future = saf::promise<void>{ ctx }.get_future().share();
     BOOST_CHECK(sh_future.is_valid() == true);
 
     auto sh_future_2 = sh_future;
     BOOST_CHECK(sh_future.is_valid() == true);
     BOOST_CHECK(sh_future_2.is_valid() == true);
 
-    auto sh_future_3 = st::shared_future<void>{};
+    auto sh_future_3 = saf::shared_future<void>{};
     BOOST_CHECK(sh_future_3.is_valid() == false);
 }
 
@@ -31,7 +30,7 @@ BOOST_AUTO_TEST_CASE(get_excecutor)
 {
     auto ctx = asio::io_context{};
 
-    auto sh_future = st::promise<void>{ ctx }.get_future().share();
+    auto sh_future = saf::promise<void>{ ctx }.get_future().share();
 
     BOOST_CHECK_NO_THROW(boost::ignore_unused(sh_future.get_executor()));
     auto sh_future_2 = std::move(sh_future);
@@ -42,7 +41,7 @@ BOOST_AUTO_TEST_CASE(is_ready)
 {
     auto ctx = asio::io_context{};
 
-    auto promise   = st::promise<void>{ ctx };
+    auto promise   = saf::promise<void>{ ctx };
     auto sh_future = promise.get_future().share();
 
     BOOST_CHECK(sh_future.is_ready() == false);
@@ -55,14 +54,14 @@ BOOST_AUTO_TEST_CASE(is_ready)
 
 BOOST_AUTO_TEST_CASE(get_no_state)
 {
-    auto sh_future = st::shared_future<int>{};
+    auto sh_future = saf::shared_future<int>{};
     BOOST_CHECK_EXCEPTION(sh_future.get(), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::no_state; });
 }
 
 BOOST_AUTO_TEST_CASE(get_unready)
 {
     auto ctx       = asio::io_context{};
-    auto promise   = st::promise<int>{ ctx };
+    auto promise   = saf::promise<int>{ ctx };
     auto sh_future = promise.get_future().share();
 
     BOOST_CHECK_EXCEPTION(sh_future.get(), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::unready_future; });
@@ -71,7 +70,7 @@ BOOST_AUTO_TEST_CASE(get_unready)
 BOOST_AUTO_TEST_CASE(async_wait_pre_set_value)
 {
     auto ctx         = asio::io_context{};
-    auto promise     = st::promise<int>{ ctx };
+    auto promise     = saf::promise<int>{ ctx };
     auto sh_future_1 = promise.get_future().share();
     auto sh_future_2 = sh_future_1;
     promise.set_value(54);
@@ -97,7 +96,7 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_set_value)
 BOOST_AUTO_TEST_CASE(async_wait_pre_set_exception)
 {
     auto ctx         = asio::io_context{};
-    auto promise     = st::promise<int>{ ctx };
+    auto promise     = saf::promise<int>{ ctx };
     auto sh_future_1 = promise.get_future().share();
     auto sh_future_2 = sh_future_1;
     promise.set_exception(std::make_exception_ptr(std::runtime_error{ "OPS" }));
@@ -123,7 +122,7 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_set_exception)
 BOOST_AUTO_TEST_CASE(async_wait_set_value)
 {
     auto ctx         = asio::io_context{};
-    auto promise     = st::promise<int>{ ctx };
+    auto promise     = saf::promise<int>{ ctx };
     auto sh_future_1 = promise.get_future().share();
     auto sh_future_2 = sh_future_1;
     int num          = 0;
@@ -154,7 +153,7 @@ BOOST_AUTO_TEST_CASE(async_wait_set_value)
 BOOST_AUTO_TEST_CASE(async_wait_set_exception)
 {
     auto ctx         = asio::io_context{};
-    auto promise     = st::promise<int>{ ctx };
+    auto promise     = saf::promise<int>{ ctx };
     auto sh_future_1 = promise.get_future().share();
     auto sh_future_2 = sh_future_1;
     int num          = 0;

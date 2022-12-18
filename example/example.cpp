@@ -10,7 +10,7 @@
 
 namespace asio = boost::asio;
 
-asio::awaitable<void> future_awaiter(saf::st::future<std::string> future)
+asio::awaitable<void> future_awaiter(saf::future<std::string> future)
 {
     fmt::print("Waiting on future ...\n");
     co_await future.async_wait(asio::deferred);
@@ -20,7 +20,7 @@ asio::awaitable<void> future_awaiter(saf::st::future<std::string> future)
 asio::awaitable<void> async_main()
 {
     auto executor = co_await asio::this_coro::executor;
-    auto promise  = saf::st::promise<std::string>{ executor };
+    auto promise  = saf::promise<std::string>{ executor };
 
     asio::co_spawn(executor, future_awaiter(promise.get_future()), asio::detached);
 

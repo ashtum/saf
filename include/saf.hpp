@@ -145,7 +145,7 @@ class service_member : public bilist_node
     virtual ~service_member()        = default;
 };
 
-template<bool IsMT>
+template<bool CC>
 class locking_strategy
 {
     struct null_mutex
@@ -164,7 +164,7 @@ class locking_strategy
         }
     };
 
-    std::conditional_t<IsMT, std::mutex, null_mutex> mutex_;
+    std::conditional_t<CC, std::mutex, null_mutex> mutex_;
 
   public:
     auto internal_lock() noexcept
@@ -173,10 +173,10 @@ class locking_strategy
     }
 };
 
-template<bool IsMT>
+template<bool CC>
 class service final
-    : public locking_strategy<IsMT>
-    , public net::detail::execution_context_service_base<service<IsMT>>
+    : public locking_strategy<CC>
+    , public net::detail::execution_context_service_base<service<CC>>
 {
     bilist_node entries_;
 
@@ -280,20 +280,20 @@ class wait_op_model final : public wait_op
     }
 };
 
-template<typename T, typename Executor, bool IsMT>
+template<typename T, typename Executor, bool CC>
 class state final
-    : public locking_strategy<IsMT>
+    : public locking_strategy<CC>
     , public service_member
 {
     Executor exec_;
-    service<IsMT>* service_;
+    service<CC>* service_;
     bilist_node waiters_;
     std::variant<std::monostate, std::exception_ptr, std::conditional_t<std::is_void_v<T>, std::monostate, T>> value_;
 
   public:
     explicit state(Executor e)
         : exec_{ std::move(e) }
-        , service_{ &net::use_service<service<IsMT>>({ net::query(exec_, net::execution::context) }) }
+        , service_{ &net::use_service<service<CC>>({ net::query(exec_, net::execution::context) }) }
     {
         service_->register_queue(this);
     }
@@ -427,15 +427,15 @@ class state final
     }
 };
 
-template<typename T, typename Executor, bool IsMT>
+template<typename T, typename Executor, bool CC>
 class shared_future
 {
-    std::shared_ptr<state<T, Executor, IsMT>> state_;
+    std::shared_ptr<state<T, Executor, CC>> state_;
 
   public:
     shared_future() = default;
 
-    explicit shared_future(std::shared_ptr<state<T, Executor, IsMT>> state) noexcept
+    explicit shared_future(std::shared_ptr<state<T, Executor, CC>> state) noexcept
         : state_{ std::move(state) }
     {
     }
@@ -485,15 +485,15 @@ class shared_future
     }
 };
 
-template<typename T, typename Executor, bool IsMT>
+template<typename T, typename Executor, bool CC>
 class future
 {
-    std::shared_ptr<state<T, Executor, IsMT>> state_;
+    std::shared_ptr<state<T, Executor, CC>> state_;
 
   public:
     future() = default;
 
-    explicit future(std::shared_ptr<state<T, Executor, IsMT>> state) noexcept
+    explicit future(std::shared_ptr<state<T, Executor, CC>> state) noexcept
         : state_{ std::move(state) }
     {
     }
@@ -537,9 +537,9 @@ class future
         return state_->get();
     }
 
-    [[nodiscard]] shared_future<T, Executor, IsMT> share() noexcept
+    [[nodiscard]] shared_future<T, Executor, CC> share() noexcept
     {
-        return shared_future<T, Executor, IsMT>{ std::move(state_) };
+        return shared_future<T, Executor, CC>{ std::move(state_) };
     }
 
     template<typename CompletionToken>
@@ -554,17 +554,17 @@ class future
     }
 };
 
-template<typename T, typename Executor, bool IsMT>
+template<typename T, typename Executor, bool CC>
 class promise
 {
-    std::shared_ptr<state<T, Executor, IsMT>> state_;
+    std::shared_ptr<state<T, Executor, CC>> state_;
     bool retrieved_{ false };
 
   public:
     promise() = default;
 
     explicit promise(Executor exec)
-        : state_{ std::make_shared<state<T, Executor, IsMT>>(std::move(exec)) }
+        : state_{ std::make_shared<state<T, Executor, CC>>(std::move(exec)) }
     {
     }
 
@@ -576,7 +576,7 @@ class promise
 
     template<typename Alloc>
     promise(Executor exec, const Alloc& alloc)
-        : state_{ std::allocate_shared<state<T, Executor, IsMT>, Alloc>(alloc, std::move(exec)) }
+        : state_{ std::allocate_shared<state<T, Executor, CC>, Alloc>(alloc, std::move(exec)) }
     {
     }
 
@@ -626,7 +626,7 @@ class promise
         state_->set_exception(exception_ptr);
     }
 
-    [[nodiscard]] future<T, Executor, IsMT> get_future()
+    [[nodiscard]] future<T, Executor, CC> get_future()
     {
         if (std::exchange(retrieved_, true))
             throw future_error{ future_errc::future_already_retrieved };
@@ -634,7 +634,7 @@ class promise
         if (!state_)
             throw future_error{ future_errc::no_state };
 
-        return future<T, Executor, IsMT>{ state_ };
+        return future<T, Executor, CC>{ state_ };
     }
 
     ~promise()
@@ -648,27 +648,23 @@ class promise
     }
 };
 } // namespace detail
-struct mt
-{
-    template<typename T, typename Executor = net::any_io_executor>
-    using future = detail::future<T, Executor, true>;
 
-    template<typename T, typename Executor = net::any_io_executor>
-    using shared_future = detail::shared_future<T, Executor, true>;
+template<typename T, typename Executor = net::any_io_executor>
+using cc_future = detail::future<T, Executor, true>;
 
-    template<typename T, typename Executor = net::any_io_executor>
-    using promise = detail::promise<T, Executor, true>;
-};
+template<typename T, typename Executor = net::any_io_executor>
+using cc_shared_future = detail::shared_future<T, Executor, true>;
 
-struct st
-{
-    template<typename T, typename Executor = net::any_io_executor>
-    using future = detail::future<T, Executor, false>;
+template<typename T, typename Executor = net::any_io_executor>
+using cc_promise = detail::promise<T, Executor, true>;
 
-    template<typename T, typename Executor = net::any_io_executor>
-    using shared_future = detail::shared_future<T, Executor, false>;
+template<typename T, typename Executor = net::any_io_executor>
+using future = detail::future<T, Executor, false>;
 
-    template<typename T, typename Executor = net::any_io_executor>
-    using promise = detail::promise<T, Executor, false>;
-};
+template<typename T, typename Executor = net::any_io_executor>
+using shared_future = detail::shared_future<T, Executor, false>;
+
+template<typename T, typename Executor = net::any_io_executor>
+using promise = detail::promise<T, Executor, false>;
+
 } // namespace saf
