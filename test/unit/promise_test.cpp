@@ -30,13 +30,21 @@ BOOST_AUTO_TEST_CASE(get_future)
     {
         auto promise = saf::promise<void>{ ctx };
         BOOST_CHECK_NO_THROW(boost::ignore_unused(promise.get_future()));
-        BOOST_CHECK_EXCEPTION(boost::ignore_unused(promise.get_future()), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::future_already_retrieved; });
+        BOOST_CHECK_EXCEPTION(
+            boost::ignore_unused(promise.get_future()),
+            saf::future_error,
+            [](const auto& e)
+            { return e.code() == saf::future_errc::future_already_retrieved; });
     }
 
     {
         auto promise   = saf::promise<void>{ ctx };
         auto promise_2 = std::move(promise);
-        BOOST_CHECK_EXCEPTION(boost::ignore_unused(promise.get_future()), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::no_state; });
+        BOOST_CHECK_EXCEPTION(
+            boost::ignore_unused(promise.get_future()),
+            saf::future_error,
+            [](const auto& e)
+            { return e.code() == saf::future_errc::no_state; });
     }
 }
 
@@ -47,14 +55,23 @@ BOOST_AUTO_TEST_CASE(set_value)
     {
         auto promise = saf::promise<int>{ ctx };
         BOOST_CHECK_NO_THROW(promise.set_value(10));
-        BOOST_CHECK_EXCEPTION(promise.set_value(20), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::promise_already_satisfied; });
+        BOOST_CHECK_EXCEPTION(
+            promise.set_value(20),
+            saf::future_error,
+            [](const auto& e) {
+                return e.code() == saf::future_errc::promise_already_satisfied;
+            });
         BOOST_CHECK_EQUAL(promise.get_future().get(), 10);
     }
 
     {
         auto promise   = saf::promise<int>{ ctx };
         auto promise_2 = std::move(promise);
-        BOOST_CHECK_EXCEPTION(promise.set_value(10), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::no_state; });
+        BOOST_CHECK_EXCEPTION(
+            promise.set_value(10),
+            saf::future_error,
+            [](const auto& e)
+            { return e.code() == saf::future_errc::no_state; });
         BOOST_CHECK(promise_2.get_future().is_ready() == false);
     }
 }
@@ -68,14 +85,26 @@ BOOST_AUTO_TEST_CASE(set_exception)
     {
         auto promise = saf::promise<int>{ ctx };
         BOOST_CHECK_NO_THROW(promise.set_exception(exception_ptr));
-        BOOST_CHECK_EXCEPTION(promise.set_exception(exception_ptr), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::promise_already_satisfied; });
-        BOOST_CHECK_EXCEPTION(promise.get_future().get(), std::runtime_error, [](const auto& e) { return std::string{ e.what() } == "OPS"; });
+        BOOST_CHECK_EXCEPTION(
+            promise.set_exception(exception_ptr),
+            saf::future_error,
+            [](const auto& e) {
+                return e.code() == saf::future_errc::promise_already_satisfied;
+            });
+        BOOST_CHECK_EXCEPTION(
+            promise.get_future().get(),
+            std::runtime_error,
+            [](const auto& e) { return std::string{ e.what() } == "OPS"; });
     }
 
     {
         auto promise   = saf::promise<int>{ ctx };
         auto promise_2 = std::move(promise);
-        BOOST_CHECK_EXCEPTION(promise.set_exception(exception_ptr), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::no_state; });
+        BOOST_CHECK_EXCEPTION(
+            promise.set_exception(exception_ptr),
+            saf::future_error,
+            [](const auto& e)
+            { return e.code() == saf::future_errc::no_state; });
         BOOST_CHECK(promise_2.get_future().is_ready() == false);
     }
 }
@@ -88,7 +117,10 @@ BOOST_AUTO_TEST_CASE(get_excecutor)
 
     BOOST_CHECK_NO_THROW(boost::ignore_unused(promise.get_executor()));
     auto promise_2 = std::move(promise);
-    BOOST_CHECK_EXCEPTION(boost::ignore_unused(promise.get_executor()), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::no_state; });
+    BOOST_CHECK_EXCEPTION(
+        boost::ignore_unused(promise.get_executor()),
+        saf::future_error,
+        [](const auto& e) { return e.code() == saf::future_errc::no_state; });
 }
 
 BOOST_AUTO_TEST_CASE(broken_promise)
@@ -100,7 +132,11 @@ BOOST_AUTO_TEST_CASE(broken_promise)
         auto promise = saf::promise<int>{ ctx };
         future       = promise.get_future();
     }
-    BOOST_CHECK_EXCEPTION(future.get(), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::broken_promise; });
+    BOOST_CHECK_EXCEPTION(
+        future.get(),
+        saf::future_error,
+        [](const auto& e)
+        { return e.code() == saf::future_errc::broken_promise; });
 }
 
 BOOST_AUTO_TEST_CASE(custom_allocator)

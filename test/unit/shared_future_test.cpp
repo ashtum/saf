@@ -34,7 +34,10 @@ BOOST_AUTO_TEST_CASE(get_excecutor)
 
     BOOST_CHECK_NO_THROW(boost::ignore_unused(sh_future.get_executor()));
     auto sh_future_2 = std::move(sh_future);
-    BOOST_CHECK_EXCEPTION(boost::ignore_unused(sh_future.get_executor()), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::no_state; });
+    BOOST_CHECK_EXCEPTION(
+        boost::ignore_unused(sh_future.get_executor()),
+        saf::future_error,
+        [](const auto& e) { return e.code() == saf::future_errc::no_state; });
 }
 
 BOOST_AUTO_TEST_CASE(is_ready)
@@ -49,13 +52,19 @@ BOOST_AUTO_TEST_CASE(is_ready)
     BOOST_CHECK(sh_future.is_ready() == true);
 
     auto sh_future_2 = std::move(sh_future);
-    BOOST_CHECK_EXCEPTION(boost::ignore_unused(sh_future.is_ready()), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::no_state; });
+    BOOST_CHECK_EXCEPTION(
+        boost::ignore_unused(sh_future.is_ready()),
+        saf::future_error,
+        [](const auto& e) { return e.code() == saf::future_errc::no_state; });
 }
 
 BOOST_AUTO_TEST_CASE(get_no_state)
 {
     auto sh_future = saf::shared_future<int>{};
-    BOOST_CHECK_EXCEPTION(sh_future.get(), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::no_state; });
+    BOOST_CHECK_EXCEPTION(
+        sh_future.get(),
+        saf::future_error,
+        [](const auto& e) { return e.code() == saf::future_errc::no_state; });
 }
 
 BOOST_AUTO_TEST_CASE(get_unready)
@@ -64,7 +73,11 @@ BOOST_AUTO_TEST_CASE(get_unready)
     auto promise   = saf::promise<int>{ ctx };
     auto sh_future = promise.get_future().share();
 
-    BOOST_CHECK_EXCEPTION(sh_future.get(), saf::future_error, [](const auto& e) { return e.code() == saf::future_errc::unready_future; });
+    BOOST_CHECK_EXCEPTION(
+        sh_future.get(),
+        saf::future_error,
+        [](const auto& e)
+        { return e.code() == saf::future_errc::unready_future; });
 }
 
 BOOST_AUTO_TEST_CASE(async_wait_pre_set_value)
@@ -115,8 +128,14 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_set_exception)
         });
     ctx.run();
     BOOST_CHECK_EQUAL(invoked, 4);
-    BOOST_CHECK_EXCEPTION(sh_future_1.get(), std::runtime_error, [](const auto& e) { return std::string{ e.what() } == "OPS"; });
-    BOOST_CHECK_EXCEPTION(sh_future_2.get(), std::runtime_error, [](const auto& e) { return std::string{ e.what() } == "OPS"; });
+    BOOST_CHECK_EXCEPTION(
+        sh_future_1.get(),
+        std::runtime_error,
+        [](const auto& e) { return std::string{ e.what() } == "OPS"; });
+    BOOST_CHECK_EXCEPTION(
+        sh_future_2.get(),
+        std::runtime_error,
+        [](const auto& e) { return std::string{ e.what() } == "OPS"; });
 }
 
 BOOST_AUTO_TEST_CASE(async_wait_set_value)
@@ -173,12 +192,19 @@ BOOST_AUTO_TEST_CASE(async_wait_set_exception)
         [&]
         {
             num = 2;
-            promise.set_exception(std::make_exception_ptr(std::runtime_error{ "OPS" }));
+            promise.set_exception(
+                std::make_exception_ptr(std::runtime_error{ "OPS" }));
         });
     ctx.run();
     BOOST_CHECK_EQUAL(num, 8);
-    BOOST_CHECK_EXCEPTION(sh_future_1.get(), std::runtime_error, [](const auto& e) { return std::string{ e.what() } == "OPS"; });
-    BOOST_CHECK_EXCEPTION(sh_future_2.get(), std::runtime_error, [](const auto& e) { return std::string{ e.what() } == "OPS"; });
+    BOOST_CHECK_EXCEPTION(
+        sh_future_1.get(),
+        std::runtime_error,
+        [](const auto& e) { return std::string{ e.what() } == "OPS"; });
+    BOOST_CHECK_EXCEPTION(
+        sh_future_2.get(),
+        std::runtime_error,
+        [](const auto& e) { return std::string{ e.what() } == "OPS"; });
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -238,8 +238,9 @@ class wait_op_model final : public wait_op
 
     static wait_op_model* construct(Executor e, Handler handler)
     {
-        auto halloc  = net::get_associated_allocator(handler);
-        auto alloc   = typename std::allocator_traits<decltype(halloc)>::template rebind_alloc<wait_op_model>(halloc);
+        auto halloc = net::get_associated_allocator(handler);
+        auto alloc  = typename std::allocator_traits<
+            decltype(halloc)>::template rebind_alloc<wait_op_model>(halloc);
         using traits = std::allocator_traits<decltype(alloc)>;
         auto pmem    = traits::allocate(alloc, 1);
 
@@ -254,9 +255,12 @@ class wait_op_model final : public wait_op
         }
     }
 
-    static void destroy(wait_op_model* self, net::associated_allocator_t<Handler> halloc)
+    static void destroy(
+        wait_op_model* self,
+        net::associated_allocator_t<Handler> halloc)
     {
-        auto alloc = typename std::allocator_traits<decltype(halloc)>::template rebind_alloc<wait_op_model>(halloc);
+        auto alloc = typename std::allocator_traits<
+            decltype(halloc)>::template rebind_alloc<wait_op_model>(halloc);
         self->~wait_op_model();
         auto traits = std::allocator_traits<decltype(alloc)>();
         traits.deallocate(alloc, self, 1);
@@ -288,12 +292,17 @@ class state final
     Executor exec_;
     service<CC>* service_;
     bilist_node waiters_;
-    std::variant<std::monostate, std::exception_ptr, std::conditional_t<std::is_void_v<T>, std::monostate, T>> value_;
+    std::variant<
+        std::monostate,
+        std::exception_ptr,
+        std::conditional_t<std::is_void_v<T>, std::monostate, T>>
+        value_;
 
   public:
     explicit state(Executor e)
         : exec_{ std::move(e) }
-        , service_{ &net::use_service<service<CC>>({ net::query(exec_, net::execution::context) }) }
+        , service_{ &net::use_service<service<CC>>(
+              { net::query(exec_, net::execution::context) }) }
     {
         service_->register_queue(this);
     }
@@ -384,12 +393,15 @@ class state final
                 auto e = get_associated_executor(handler, exec_);
 
                 if (is_ready())
-                    return net::post(std::move(e), net::append(std::move(handler), error_code{}));
+                    return net::post(
+                        std::move(e),
+                        net::append(std::move(handler), error_code{}));
 
                 using handler_type = std::decay_t<decltype(handler)>;
                 using model_type   = wait_op_model<decltype(e), handler_type>;
-                model_type* model  = model_type ::construct(std::move(e), std::forward<decltype(handler)>(handler));
-                auto slot          = model->get_cancellation_slot();
+                model_type* model  = model_type ::construct(
+                    std::move(e), std::forward<decltype(handler)>(handler));
+                auto slot = model->get_cancellation_slot();
                 if (slot.is_connected())
                 {
                     slot.assign(
@@ -414,16 +426,17 @@ class state final
             static_cast<wait_op*>(nx)->complete(ec);
     }
 
+    ~state()
+    {
+        service_->unregister_queue(this);
+    }
+
+  private:
     void shutdown() noexcept override
     {
         auto& nx = waiters_.next_;
         while (nx != &waiters_)
             static_cast<wait_op*>(nx)->shutdown();
-    }
-
-    ~state()
-    {
-        service_->unregister_queue(this);
     }
 };
 
@@ -433,13 +446,30 @@ class shared_future
     std::shared_ptr<state<T, Executor, CC>> state_;
 
   public:
+    /// Default constructor.
+    /**
+     * This constructor creates a shared_future with an empty state.
+     */
     shared_future() = default;
 
-    explicit shared_future(std::shared_ptr<state<T, Executor, CC>> state) noexcept
+    /// Constructor.
+    /**
+     * This constructor creates a shared_future from a state. this constructor
+     * is only used when share() method on future is called.
+     */
+    explicit shared_future(
+        std::shared_ptr<state<T, Executor, CC>> state) noexcept
         : state_{ std::move(state) }
     {
     }
 
+    /// Gets the executor associated with the object.
+    /**
+     * @return the executor associated with the object.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a state.
+     */
     [[nodiscard]] Executor get_executor() const
     {
         if (!state_)
@@ -448,11 +478,29 @@ class shared_future
         return state_->get_executor();
     }
 
+    /// Checks if the future contains a state.
+    /**
+     * This function checks if the future contains a state, a default
+     * constructed, moved-from and a future that is converted to a shared_future
+     * does not contain a state.
+     *
+     * @return true if the future contains a state, otherwise false.
+     */
     [[nodiscard]] bool is_valid() const noexcept
     {
         return !!state_;
     }
 
+    /// Checks if the result is ready.
+    /**
+     * This function checks if the promise side set a result or an exception in
+     * the state.
+     *
+     * @return true if the result is ready, otherwise false.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if shared_future
+     * does not contain a state.
+     */
     [[nodiscard]] bool is_ready() const
     {
         if (!state_)
@@ -463,6 +511,22 @@ class shared_future
         return state_->is_ready();
     }
 
+    /// Returns the result.
+    /**
+     * This function returns the result or throws the exception that the promise
+     * side set, this function should be called after async_wait completes,
+     * otherwise `future_error{ future_errc::unready_future }` will be thrown.
+     *
+     * @return const T& or void if T is void
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if shared_future
+     * does not contain a state.
+     *
+     * @throws `future_error{ future_errc::unready_future }` Thrown on if
+     * shared_future is not ready yet.
+     *
+     * @throws stored exception if promise side set an exception.
+     */
     decltype(auto) get() const
     {
         if (!state_)
@@ -473,6 +537,27 @@ class shared_future
         return std::as_const(*state_).get();
     }
 
+    /// Starts an asynchronous wait on the shared_future.
+    /**
+     * This function initiates an asynchronous wait against the shared_future
+     * and always returns immediately.
+     *
+     * For each call to async_wait(), the completion handler will be called
+     * exactly once. The completion handler will be called when:
+     *
+     * @li The promise sets a value.
+     *
+     * @li The promise sets an exception.
+     *
+     * @li The promise goes out of scope and an exception of `future_error{
+     * future_errc::broken_promise }` set automatically.
+     *
+     * @li The shared_future was canceled, in which case the handler is passed
+     * the error code net::error::operation_aborted.
+     *
+     * @param token The completion_token that will be used to produce a
+     * completion handler.
+     */
     template<typename CompletionToken>
     auto async_wait(CompletionToken&& token)
     {
@@ -491,8 +576,17 @@ class future
     std::shared_ptr<state<T, Executor, CC>> state_;
 
   public:
+    /// Default constructor.
+    /**
+     * This constructor creates a future with an empty state.
+     */
     future() = default;
 
+    /// Constructor.
+    /**
+     * This constructor creates a future from a state. this constructor is only
+     * used by promise side to create a future pair.
+     */
     explicit future(std::shared_ptr<state<T, Executor, CC>> state) noexcept
         : state_{ std::move(state) }
     {
@@ -504,6 +598,13 @@ class future
     future(future&&)            = default;
     future& operator=(future&&) = default;
 
+    /// Gets the executor associated with the object.
+    /**
+     * @return the executor associated with the object.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a state.
+     */
     [[nodiscard]] Executor get_executor() const
     {
         if (!state_)
@@ -512,11 +613,29 @@ class future
         return state_->get_executor();
     }
 
+    /// Checks if the future contains a state.
+    /**
+     * This function checks if the future contains a state, a default
+     * constructed, moved-from and a future that is converted to a shared_future
+     * does not contain a state.
+     *
+     * @return true if the future contains a state, otherwise false.
+     */
     [[nodiscard]] bool is_valid() const noexcept
     {
         return !!state_;
     }
 
+    /// Checks if the result is ready.
+    /**
+     * This function checks if the promise side set a result or an exception in
+     * the state.
+     *
+     * @return true if the result is ready, otherwise false.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a state.
+     */
     [[nodiscard]] bool is_ready() const
     {
         if (!state_)
@@ -527,6 +646,22 @@ class future
         return state_->is_ready();
     }
 
+    /// Returns the result.
+    /**
+     * This function returns the result or throws the exception that the promise
+     * side set, this function should be called after async_wait completes,
+     * otherwise `future_error{ future_errc::unready_future }` will be thrown.
+     *
+     * @return T& or void if T is void
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a state.
+     *
+     * @throws `future_error{ future_errc::unready_future }` Thrown on if future
+     * is not ready yet.
+     *
+     * @throws stored exception if promise side set an exception.
+     */
     decltype(auto) get()
     {
         if (!state_)
@@ -537,11 +672,46 @@ class future
         return state_->get();
     }
 
-    [[nodiscard]] shared_future<T, Executor, CC> share() noexcept
+    /// Creates a shared_future.
+    /**
+     * This function transfers the state of the future to an instance of
+     * shared_future and leaves the future with an empty state (is_valid() on
+     * future returns false after this function).
+     *
+     * @return an instance of shared_future.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a state.
+     */
+    [[nodiscard]] shared_future<T, Executor, CC> share()
     {
+        if (!state_)
+            throw future_error{ future_errc::no_state };
+
         return shared_future<T, Executor, CC>{ std::move(state_) };
     }
 
+    /// Starts an asynchronous wait on the future.
+    /**
+     * This function initiates an asynchronous wait against the future and
+     * always returns immediately.
+     *
+     * For each call to async_wait(), the completion handler will be called
+     * exactly once. The completion handler will be called when:
+     *
+     * @li The promise sets a value.
+     *
+     * @li The promise sets an exception.
+     *
+     * @li The promise goes out of scope and an exception of `future_error{
+     * future_errc::broken_promise }` set automatically.
+     *
+     * @li The future was canceled, in which case the handler is passed the
+     * error code net::error::operation_aborted.
+     *
+     * @param token The completion_token that will be used to produce a
+     * completion handler.
+     */
     template<typename CompletionToken>
     auto async_wait(CompletionToken&& token)
     {
@@ -561,26 +731,69 @@ class promise
     bool retrieved_{ false };
 
   public:
+    /// Default constructor.
+    /**
+     * This constructor creates a promise with an empty state.
+     */
     promise() = default;
 
+    /// Constructor.
+    /**
+     * @param exec The I/O executor that the future will use, by default, to
+     * dispatch handlers for any asynchronous operations performed on the timer.
+     */
     explicit promise(Executor exec)
         : state_{ std::make_shared<state<T, Executor, CC>>(std::move(exec)) }
     {
     }
 
-    template<typename ExecutionContext, typename std::enable_if_t<std::is_convertible_v<ExecutionContext&, net::execution_context&>>* = nullptr>
+    /// Constructor.
+    /**
+     * @param ctx An execution context that provides the I/O executor that the
+     * future will use, by default, to dispatch handlers for any asynchronous
+     * operations performed on the future.
+     */
+    template<
+        typename ExecutionContext,
+        typename std::enable_if_t<std::is_convertible_v<
+            ExecutionContext&,
+            net::execution_context&>>* = nullptr>
     explicit promise(ExecutionContext& ctx)
         : promise{ ctx.get_executor() }
     {
     }
 
+    /// Constructor.
+    /**
+     * @param exec The I/O executor that the future will use, by default, to
+     * dispatch handlers for any asynchronous operations performed on the timer.
+     *
+     * @param alloc The allocator will be used for allocating sharing state
+     * between promise and future
+     */
     template<typename Alloc>
     promise(Executor exec, const Alloc& alloc)
-        : state_{ std::allocate_shared<state<T, Executor, CC>, Alloc>(alloc, std::move(exec)) }
+        : state_{ std::allocate_shared<state<T, Executor, CC>, Alloc>(
+              alloc,
+              std::move(exec)) }
     {
     }
 
-    template<typename ExecutionContext, typename Alloc, typename std::enable_if_t<std::is_convertible_v<ExecutionContext&, net::execution_context&>>* = nullptr>
+    /// Constructor.
+    /**
+     * @param ctx An execution context that provides the I/O executor that the
+     * future will use, by default, to dispatch handlers for any asynchronous
+     * operations performed on the future.
+     *
+     * @param alloc The allocator will be used for allocating sharing state
+     * between promise and future
+     */
+    template<
+        typename ExecutionContext,
+        typename Alloc,
+        typename std::enable_if_t<std::is_convertible_v<
+            ExecutionContext&,
+            net::execution_context&>>* = nullptr>
     explicit promise(ExecutionContext& ctx, const Alloc& alloc)
         : promise{ ctx.get_executor(), alloc }
     {
@@ -592,6 +805,13 @@ class promise
     promise(promise&&)            = default;
     promise& operator=(promise&&) = default;
 
+    /// Gets the executor associated with the object.
+    /**
+     * @return the executor associated with the object.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if promise does
+     * not contain a state.
+     */
     [[nodiscard]] Executor get_executor() const
     {
         if (!state_)
@@ -600,11 +820,29 @@ class promise
         return state_->get_executor();
     }
 
+    /// Checks if the promise contains a state.
+    /**
+     * This function checks if the promise contains a state, a default
+     * constructed, and a moved-from promise does not contain a state.
+     *
+     * @return true if the promise contains a state, otherwise false.
+     */
     [[nodiscard]] bool is_valid() const noexcept
     {
         return !!state_;
     }
 
+    /// Sets a value in the state.
+    /**
+     * This function sets a value to be used by the future and signals all the
+     * waiting handlers on the future side.
+     *
+     * @throws `future_error{ future_errc::promise_already_satisfied }` Thrown
+     * if a value or an exception has already been set.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a state.
+     */
     template<typename... Args>
     void set_value(Args&&... args)
     {
@@ -616,6 +854,17 @@ class promise
         state_->set_value(std::forward<Args>(args)...);
     }
 
+    /// Sets an exception in the state.
+    /**
+     * This function sets an exception to be used by the future and signals all
+     * the waiting handlers on the future side.
+     *
+     * @throws `future_error{ future_errc::promise_already_satisfied }` Thrown
+     * if a value or an exception has already been set.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a state.
+     */
     void set_exception(std::exception_ptr exception_ptr)
     {
         if (!state_)
@@ -626,24 +875,43 @@ class promise
         state_->set_exception(exception_ptr);
     }
 
+    /// Creates a future.
+    /**
+     * This function creates a future associated with the same state.
+     *
+     * @return an instance of the future.
+     *
+     * @throws `future_error{ future_errc::future_already_retrieved }` Thrown if
+     * get_future() has already been called.
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a state.
+     */
     [[nodiscard]] future<T, Executor, CC> get_future()
     {
-        if (std::exchange(retrieved_, true))
-            throw future_error{ future_errc::future_already_retrieved };
-
         if (!state_)
             throw future_error{ future_errc::no_state };
+
+        if (std::exchange(retrieved_, true))
+            throw future_error{ future_errc::future_already_retrieved };
 
         return future<T, Executor, CC>{ state_ };
     }
 
+    /// Destroys the promise.
+    /**
+     * This function destroys the promise, if no value or exception is set an
+     * exception of `future_error{ future_errc::broken_promise }` will be set in
+     * the state and signal all the waiting handlers on the future side.
+     */
     ~promise()
     {
-        if (state_)
+        if (state_ && retrieved_)
         {
             auto lg = state_->internal_lock();
             if (!state_->is_ready())
-                state_->set_exception(std::make_exception_ptr(future_error{ future_errc::broken_promise }));
+                state_->set_exception(std::make_exception_ptr(
+                    future_error{ future_errc::broken_promise }));
         }
     }
 };
