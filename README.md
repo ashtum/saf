@@ -10,7 +10,7 @@ The latest version of the single header can be downloaded from [`include/saf.hpp
 **NOTE**
 
 If you are using a stand-alone version of Asio you can define `SAF_ASIO_STANDALONE` before including `saf.hpp`.  
-If you need thread-safe access to future/promise you can use their concurrent versions (`saf::cc_future`, `saf::cc_shared_future`, `saf::cc_promise`).  
+If you need thread-safe access to future/promise (you are using multi-threaded executor) you can use the concurrent versions (`saf::cc_future`, `saf::cc_shared_future`, `saf::cc_promise`).  
 ```c++
 #include <saf.hpp>
 
