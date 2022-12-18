@@ -568,8 +568,8 @@ class promise
     {
     }
 
-    template<typename ExecutionContext>
-    explicit promise(ExecutionContext& ctx, std::enable_if_t<std::is_convertible_v<ExecutionContext&, net::execution_context&>>* = nullptr)
+    template<typename ExecutionContext, typename std::enable_if_t<std::is_convertible_v<ExecutionContext&, net::execution_context&>>* = nullptr>
+    explicit promise(ExecutionContext& ctx)
         : promise{ ctx.get_executor() }
     {
     }
@@ -580,8 +580,8 @@ class promise
     {
     }
 
-    template<typename ExecutionContext, typename Alloc>
-    explicit promise(ExecutionContext& ctx, const Alloc& alloc, std::enable_if_t<std::is_convertible_v<ExecutionContext&, net::execution_context&>>* = nullptr)
+    template<typename ExecutionContext, typename Alloc, typename std::enable_if_t<std::is_convertible_v<ExecutionContext&, net::execution_context&>>* = nullptr>
+    explicit promise(ExecutionContext& ctx, const Alloc& alloc)
         : promise{ ctx.get_executor(), alloc }
     {
     }

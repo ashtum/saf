@@ -5,27 +5,22 @@
 #include <saf.hpp>
 
 #include <boost/asio.hpp>
-
 #include <fmt/format.h>
 
 namespace asio = boost::asio;
 
-asio::awaitable<void> future_awaiter(saf::future<std::string> future)
+asio::awaitable<void> future_getter(saf::future<std::string> future)
 {
     fmt::print("Waiting on future ...\n");
     co_await future.async_wait(asio::deferred);
     fmt::print("Future value: {}\n", future.get());
 }
 
-asio::awaitable<void> async_main()
+asio::awaitable<void> promise_setter(saf::promise<std::string> promise)
 {
-    auto executor = co_await asio::this_coro::executor;
-    auto promise  = saf::promise<std::string>{ executor };
+    auto timer = asio::steady_timer{ co_await asio::this_coro::executor };
 
-    asio::co_spawn(executor, future_awaiter(promise.get_future()), asio::detached);
-
-    auto timer = asio::steady_timer{ executor };
-    for (int i = 1; i <= 3; i++)
+    for (auto i = 1; i <= 3; i++)
     {
         timer.expires_after(std::chrono::seconds{ 1 });
         co_await timer.async_wait(asio::deferred);
@@ -39,7 +34,10 @@ int main()
 {
     auto ctx = asio::io_context{};
 
-    asio::co_spawn(ctx, async_main(), asio::detached);
+    auto promise = saf::promise<std::string>{ ctx };
+
+    asio::co_spawn(ctx, future_getter(promise.get_future()), asio::detached);
+    asio::co_spawn(ctx, promise_setter(std::move(promise)), asio::detached);
 
     ctx.run();
 }
