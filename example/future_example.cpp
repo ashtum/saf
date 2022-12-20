@@ -11,9 +11,9 @@ namespace asio = boost::asio;
 
 asio::awaitable<void> future_getter(saf::future<std::string> future)
 {
-    fmt::print("Waiting on future ...\n");
+    fmt::print("Waiting on the future...\n");
     co_await future.async_wait(asio::deferred);
-    fmt::print("Future value: {}\n", future.get());
+    fmt::print("The result: {}\n", future.get());
 }
 
 asio::awaitable<void> promise_setter(saf::promise<std::string> promise)
