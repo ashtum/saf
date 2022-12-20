@@ -154,4 +154,64 @@ BOOST_AUTO_TEST_CASE(custom_allocator)
     }
 }
 
+BOOST_AUTO_TEST_CASE(set_value_with_different_arguments)
+{
+    auto ctx = asio::io_context{};
+
+    class non_moveable
+    {
+      public:
+        non_moveable(int)
+        {
+        }
+        non_moveable(non_moveable&&) = delete;
+    };
+
+    {
+        auto promise = saf::promise<non_moveable>{ ctx };
+        promise.set_value(1);
+    }
+
+    class move_only
+    {
+      public:
+        move_only(int)
+        {
+        }
+        move_only(const move_only&) = delete;
+        move_only(move_only&&)      = default;
+    };
+
+    {
+        auto promise = saf::promise<move_only>{ ctx };
+        auto obj     = move_only{ 1 };
+        promise.set_value(std::move(obj));
+    }
+
+    {
+        auto promise = saf::promise<move_only>{ ctx };
+        promise.set_value(move_only{ 1 });
+    }
+
+    class copyable
+    {
+      public:
+        copyable(int)
+        {
+        }
+    };
+
+    {
+        auto promise = saf::promise<copyable>{ ctx };
+        auto obj     = copyable{ 1 };
+        promise.set_value(obj);
+    }
+
+    {
+        auto promise   = saf::promise<copyable>{ ctx };
+        const auto obj = copyable{ 1 };
+        promise.set_value(obj);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
