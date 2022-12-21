@@ -474,7 +474,9 @@ class shared_future
     /// Constructor.
     /**
      * This constructor creates a shared_future from a shared state. this
-     * constructor is only by share() method on future.
+     * constructor is only used in the share() function on future.
+     *
+     * @param shared_state a shared pointer to the shared state.
      */
     explicit shared_future(
         std::shared_ptr<shared_state<T, Executor, CC>> shared_state) noexcept
@@ -618,7 +620,9 @@ class future
     /// Constructor.
     /**
      * This constructor creates a future from a shared state. this constructor
-     * is only used by the promise to create a future.
+     * is only called in the get_future() function in the promise.
+     *
+     * @param shared_state a shared pointer to the shared state.
      */
     explicit future(
         std::shared_ptr<shared_state<T, Executor, CC>> shared_state) noexcept
@@ -850,7 +854,7 @@ class promise
         typename std::enable_if_t<std::is_convertible_v<
             ExecutionContext&,
             net::execution_context&>>* = nullptr>
-    explicit promise(ExecutionContext& context, const Alloc& alloc)
+    promise(ExecutionContext& context, const Alloc& alloc)
         : promise{ context.get_executor(), alloc }
     {
     }

@@ -76,6 +76,34 @@ BOOST_AUTO_TEST_CASE(set_value)
     }
 }
 
+BOOST_AUTO_TEST_CASE(set_value_void)
+{
+    auto ctx = asio::io_context{};
+
+    {
+        auto promise = saf::promise<void>{ ctx };
+        BOOST_CHECK_NO_THROW(promise.set_value());
+        BOOST_CHECK_EXCEPTION(
+            promise.set_value(),
+            saf::future_error,
+            [](const auto& e) {
+                return e.code() == saf::future_errc::promise_already_satisfied;
+            });
+        BOOST_CHECK_NO_THROW(promise.get_future().get());
+    }
+
+    {
+        auto promise   = saf::promise<void>{ ctx };
+        auto promise_2 = std::move(promise);
+        BOOST_CHECK_EXCEPTION(
+            promise.set_value(),
+            saf::future_error,
+            [](const auto& e)
+            { return e.code() == saf::future_errc::no_state; });
+        BOOST_CHECK(promise_2.get_future().is_ready() == false);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(set_exception)
 {
     auto ctx = asio::io_context{};
@@ -152,6 +180,16 @@ BOOST_AUTO_TEST_CASE(custom_allocator)
         auto alloc   = std::allocator<std::byte>{};
         auto promise = saf::promise<int>{ ctx.get_executor(), alloc };
     }
+}
+
+BOOST_AUTO_TEST_CASE(custom_executor)
+{
+    auto ctx         = asio::io_context{};
+    using executor_t = asio::io_context::executor_type;
+
+    auto promise   = saf::promise<void, executor_t>{ ctx };
+    auto future    = saf::future<void, executor_t>{ promise.get_future() };
+    auto sh_future = saf::shared_future<void, executor_t>{ future.share() };
 }
 
 BOOST_AUTO_TEST_CASE(set_value_with_different_arguments)
