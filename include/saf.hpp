@@ -390,26 +390,29 @@ class shared_state final
         return net::async_initiate<decltype(token), void(error_code)>(
             [this](auto handler)
             {
-                auto e = get_associated_executor(handler, executor_);
+                auto exec = get_associated_executor(handler, executor_);
 
                 if (is_ready())
                     return net::post(
-                        std::move(e),
+                        std::move(exec),
                         net::append(std::move(handler), error_code{}));
 
                 using handler_type = std::decay_t<decltype(handler)>;
-                using model_type   = wait_op_model<decltype(e), handler_type>;
-                model_type* model  = model_type ::construct(
-                    std::move(e), std::forward<decltype(handler)>(handler));
-                auto slot = model->get_cancellation_slot();
-                if (slot.is_connected())
+                using model_type  = wait_op_model<decltype(exec), handler_type>;
+                model_type* model = model_type ::construct(
+                    std::move(exec), std::forward<decltype(handler)>(handler));
+                auto c_slot = model->get_cancellation_slot();
+                if (c_slot.is_connected())
                 {
-                    slot.assign(
-                        [model, this](net::cancellation_type type)
+                    c_slot.assign(
+                        [this, c_slot, model](net::cancellation_type type)
                         {
                             if (type != net::cancellation_type::none)
                             {
                                 auto lg = this->internal_lock();
+                                // already completed
+                                if (!c_slot.is_connected())
+                                    return;
                                 model->complete(net::error::operation_aborted);
                             }
                         });

@@ -185,7 +185,7 @@ BOOST_AUTO_TEST_CASE(async_wait_set_exception)
 BOOST_AUTO_TEST_CASE(async_wait_cancellation)
 {
     auto ctx     = asio::io_context{};
-    auto promise = saf::promise<int>{ ctx };
+    auto promise = saf::promise<void>{ ctx };
     auto future  = promise.get_future();
     auto invoked = false;
     auto cs      = asio::cancellation_signal{};
@@ -200,6 +200,27 @@ BOOST_AUTO_TEST_CASE(async_wait_cancellation)
     ctx.run();
     BOOST_CHECK(invoked == true);
     BOOST_CHECK(future.is_ready() == false);
+}
+
+BOOST_AUTO_TEST_CASE(async_wait_cancel_already_completed)
+{
+    auto ctx     = asio::io_context{};
+    auto promise = saf::promise<int>{ ctx };
+    auto future  = promise.get_future();
+    auto invoked = 0;
+    auto cs      = asio::cancellation_signal{};
+    future.async_wait(asio::bind_cancellation_slot(
+        cs.slot(),
+        [&](auto ec)
+        {
+            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            invoked += 1;
+        }));
+    promise.set_value();
+    cs.emit(asio::cancellation_type::terminal);
+    ctx.run();
+    BOOST_CHECK_EQUAL(invoked, 1);
+    BOOST_CHECK(future.is_ready() == true);
 }
 
 BOOST_AUTO_TEST_CASE(async_wait_shutdown)
