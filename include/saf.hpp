@@ -392,6 +392,8 @@ class shared_state final
             {
                 auto exec = get_associated_executor(handler, executor_);
 
+                auto lg = this->internal_lock();
+
                 if (is_ready())
                     return net::post(
                         std::move(exec),
@@ -587,8 +589,6 @@ class shared_future
         if (!shared_state_)
             throw future_error{ future_errc::no_state };
 
-        auto lg = shared_state_->internal_lock();
-
         return shared_state_->async_wait(std::forward<CompletionToken>(token));
     }
 };
@@ -757,8 +757,6 @@ class future
     {
         if (!shared_state_)
             throw future_error{ future_errc::no_state };
-
-        auto lg = shared_state_->internal_lock();
 
         return shared_state_->async_wait(std::forward<CompletionToken>(token));
     }
