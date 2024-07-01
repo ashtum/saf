@@ -10,21 +10,24 @@
 
 namespace asio = boost::asio;
 
-asio::awaitable<void> future_getter_1(saf::shared_future<std::string> future)
+asio::awaitable<void>
+future_getter_1(saf::shared_future<std::string> future)
 {
     std::cout << "Waiting on the future...\n";
     co_await future.async_wait();
     std::cout << "The result: " << future.get() << '\n';
 }
 
-asio::awaitable<void> future_getter_2(saf::shared_future<std::string> future)
+asio::awaitable<void>
+future_getter_2(saf::shared_future<std::string> future)
 {
     std::cout << "Waiting on the future...\n";
     co_await future.async_wait();
     std::cout << "The result: " << future.get() << '\n';
 }
 
-asio::awaitable<void> promise_setter(saf::promise<std::string> promise)
+asio::awaitable<void>
+promise_setter(saf::promise<std::string> promise)
 {
     auto timer = asio::steady_timer{ co_await asio::this_coro::executor };
 
@@ -38,7 +41,8 @@ asio::awaitable<void> promise_setter(saf::promise<std::string> promise)
     promise.set_value("HOWDY!");
 }
 
-int main()
+int
+main()
 {
     auto ctx = asio::io_context{};
 

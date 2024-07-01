@@ -4,7 +4,7 @@ ContinuationIndentWidth: 4
 IndentWidth: 4
 ColumnLimit: 80
 AlwaysBreakAfterDefinitionReturnType: None
-AlwaysBreakAfterReturnType: None
+AlwaysBreakAfterReturnType: All
 AllowShortFunctionsOnASingleLine: false
 BreakBeforeBraces: Allman
 AlignAfterOpenBracket: AlwaysBreak
