@@ -11,6 +11,7 @@
 #include <asio/any_io_executor.hpp>
 #include <asio/append.hpp>
 #include <asio/associated_cancellation_slot.hpp>
+#include <asio/default_completion_token.hpp>
 #include <asio/post.hpp>
 namespace saf
 {
@@ -21,6 +22,7 @@ using error_code = std::error_code;
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/append.hpp>
 #include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/default_completion_token.hpp>
 #include <boost/asio/post.hpp>
 namespace saf
 {
@@ -583,8 +585,12 @@ class shared_future
      * @param token The completion_token that will be used to produce a
      * completion handler.
      */
-    template<typename CompletionToken>
-    auto async_wait(CompletionToken&& token)
+    template<
+        typename CompletionToken =
+            net::default_completion_token<Executor>::type>
+    auto async_wait(
+        CompletionToken&& token =
+            typename net::default_completion_token<Executor>::type{})
     {
         if (!shared_state_)
             throw future_error{ future_errc::no_state };
@@ -752,8 +758,12 @@ class future
      * @param token The completion_token that will be used to produce a
      * completion handler.
      */
-    template<typename CompletionToken>
-    auto async_wait(CompletionToken&& token)
+    template<
+        typename CompletionToken =
+            net::default_completion_token<Executor>::type>
+    auto async_wait(
+        CompletionToken&& token =
+            typename net::default_completion_token<Executor>::type{})
     {
         if (!shared_state_)
             throw future_error{ future_errc::no_state };

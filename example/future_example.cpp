@@ -13,7 +13,7 @@ namespace asio = boost::asio;
 asio::awaitable<void> future_getter(saf::future<std::string> future)
 {
     std::cout << "Waiting on the future...\n";
-    co_await future.async_wait(asio::deferred);
+    co_await future.async_wait();
     std::cout << "The result: " << future.get() << '\n';
 }
 
@@ -24,7 +24,7 @@ asio::awaitable<void> promise_setter(saf::promise<std::string> promise)
     for (auto i = 1; i <= 3; i++)
     {
         timer.expires_after(std::chrono::seconds{ 1 });
-        co_await timer.async_wait(asio::deferred);
+        co_await timer.async_wait();
         std::cout << i << '\n';
     }
 
