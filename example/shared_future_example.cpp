@@ -5,22 +5,23 @@
 #include <saf.hpp>
 
 #include <boost/asio.hpp>
-#include <fmt/format.h>
+
+#include <iostream>
 
 namespace asio = boost::asio;
 
 asio::awaitable<void> future_getter_1(saf::shared_future<std::string> future)
 {
-    fmt::print("Waiting on the future...\n");
+    std::cout << "Waiting on the future...\n";
     co_await future.async_wait(asio::deferred);
-    fmt::print("The result: {}\n", future.get());
+    std::cout << "The result: " << future.get() << '\n';
 }
 
 asio::awaitable<void> future_getter_2(saf::shared_future<std::string> future)
 {
-    fmt::print("Waiting on the future...\n");
+    std::cout << "Waiting on the future...\n";
     co_await future.async_wait(asio::deferred);
-    fmt::print("The result: {}\n", future.get());
+    std::cout << "The result: " << future.get() << '\n';
 }
 
 asio::awaitable<void> promise_setter(saf::promise<std::string> promise)
@@ -31,7 +32,7 @@ asio::awaitable<void> promise_setter(saf::promise<std::string> promise)
     {
         timer.expires_after(std::chrono::seconds{ 1 });
         co_await timer.async_wait(asio::deferred);
-        fmt::print("{}\n", i);
+        std::cout << i << '\n';
     }
 
     promise.set_value("HOWDY!");
