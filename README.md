@@ -1,46 +1,51 @@
 ## What is the saf?
 
-**saf** is a single-header Asio based **scheduler aware future**/promise that does not block a whole thread if you wait for future. instead it cooperates with Asio's executor like other Asio based io_objects (e.g. asio::steady_timer).  
-Because saf uses Asio's asynchronous model the wait operation on the future can be composed with other asynchronous operations and supports cancellation.  
+**saf** is a single-header Asio-based **Scheduler Aware Future**/promise that does not block an entire thread when you wait for a future. Instead, it cooperates with Asio's executor like other Asio-based IO objects (e.g., `asio::steady_timer`).  
+Because saf uses Asio's asynchronous model, the wait operation on the future can be composed with other asynchronous operations and supports cancellation.
 
-### Quick usage
+### Quick Usage
 
 The latest version of the single header can be downloaded from [`include/saf.hpp`](include/saf.hpp).
 
 **NOTE**
 
-If you are using a stand-alone version of Asio you can define `SAF_ASIO_STANDALONE` before including `saf.hpp`.  
-If you need thread-safe access to future/promise (you are using multi-threaded executor) you can use the concurrent versions (`saf::cc_future`, `saf::cc_shared_future`, `saf::cc_promise`).  
+If you are using a stand-alone version of Asio, you can define `SAF_ASIO_STANDALONE` before including `saf.hpp`.  
+If you need thread-safe access to future/promise (e.g., you are using a multi-threaded executor), you can use the concurrent versions (`saf::cc_future`, `saf::cc_shared_future`, `saf::cc_promise`).
+
 ```c++
 #include <saf.hpp>
 
 #include <boost/asio.hpp>
-#include <fmt/format.h>
+
+#include <iostream>
 
 namespace asio = boost::asio;
 
-asio::awaitable<void> future_getter(saf::future<std::string> future)
+asio::awaitable<void>
+future_getter(saf::future<std::string> future)
 {
-    fmt::print("Waiting on the future...\n");
-    co_await future.async_wait(asio::deferred);
-    fmt::print("The result: {}\n", future.get());
+    std::cout << "Waiting on the future...\n";
+    co_await future.async_wait();
+    std::cout << "The result: " << future.get() << '\n';
 }
 
-asio::awaitable<void> promise_setter(saf::promise<std::string> promise)
+asio::awaitable<void>
+promise_setter(saf::promise<std::string> promise)
 {
     auto timer = asio::steady_timer{ co_await asio::this_coro::executor };
 
     for (auto i = 1; i <= 3; i++)
     {
         timer.expires_after(std::chrono::seconds{ 1 });
-        co_await timer.async_wait(asio::deferred);
-        fmt::print("{}\n", i);
+        co_await timer.async_wait();
+        std::cout << i << '\n';
     }
 
     promise.set_value("HOWDY!");
 }
 
-int main()
+int
+main()
 {
     auto ctx = asio::io_context{};
 
