@@ -11,23 +11,27 @@
 #include <asio/any_io_executor.hpp>
 #include <asio/append.hpp>
 #include <asio/associated_cancellation_slot.hpp>
+#include <asio/compose.hpp>
 #include <asio/default_completion_token.hpp>
 #include <asio/post.hpp>
 namespace saf
 {
-namespace net    = asio;
-using error_code = std::error_code;
+namespace net      = asio;
+using error_code   = std::error_code;
+using system_error = std::system_error;
 } // namespace saf
 #else
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/append.hpp>
 #include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/compose.hpp>
 #include <boost/asio/default_completion_token.hpp>
 #include <boost/asio/post.hpp>
 namespace saf
 {
-namespace net    = boost::asio;
-using error_code = boost::system::error_code;
+namespace net      = boost::asio;
+using error_code   = boost::system::error_code;
+using system_error = boost::system::system_error;
 } // namespace saf
 #endif
 
@@ -39,6 +43,7 @@ enum class future_errc
     unready_future,
     promise_already_satisfied,
     future_already_retrieved,
+    value_already_extracted,
     broken_promise,
 };
 } // namespace saf
@@ -77,6 +82,8 @@ future_category()
                     return "Promise already satisfied";
                 case future_errc::future_already_retrieved:
                     return "Future already retrieved";
+                case future_errc::value_already_extracted:
+                    return "Value already extracted";
                 case future_errc::broken_promise:
                     return "Broken promise";
                 default:
@@ -370,25 +377,46 @@ class shared_state final
         complete_all({});
     }
 
-    decltype(auto)
-    get()
+    auto
+    extract()
     {
         if (!is_ready())
             throw future_error{ future_errc::unready_future };
 
         if (auto* p = std::get_if<2>(&value_))
         {
+            auto tmp = std::move(*p);
+            value_.template emplace<1>(std::make_exception_ptr(
+                future_error{ future_errc::value_already_extracted }));
             if constexpr (std::is_same_v<T, void>)
             {
                 return;
             }
             else
             {
-                return *p;
+                return std::move(tmp);
             }
         }
 
         std::rethrow_exception(std::get<1>(value_));
+    }
+
+    std::exception_ptr
+    try_extract(T* out)
+    {
+        if (auto* p = std::get_if<2>(&value_))
+        {
+            *out = std::move(*p);
+            value_.template emplace<1>(std::make_exception_ptr(
+                future_error{ future_errc::value_already_extracted }));
+            return {};
+        }
+
+        if (auto* p = std::get_if<1>(&value_))
+            return *p;
+
+        return std::make_exception_ptr(
+            future_error{ future_errc::unready_future });
     }
 
     decltype(auto)
@@ -584,6 +612,9 @@ class shared_future
      * @throws `future_error{ future_errc::unready_future }` Thrown on if
      * promise side has not set a value or an exception yet.
      *
+     * @throws `future_error{ future_errc::value_already_extracted }` Thrown if
+     * the value was already extracted out of the shared state.
+     *
      * @throws stored exception if the promise side set an exception.
      */
     decltype(auto)
@@ -737,18 +768,21 @@ class future
      * This function returns the result or throws the exception that the promise
      * side set.
      *
-     * @returns T& or void if T is void
+     * @returns const T& or void if T is void
      *
      * @throws `future_error{ future_errc::no_state }` Thrown if future does not
      * contain a shared state.
      *
-     * @throws `future_error{ future_errc::unready_future }` Thrown on if
+     * @throws `future_error{ future_errc::unready_future }` Thrown if
      * promise side has not set a value or an exception yet.
+     *
+     * @throws `future_error{ future_errc::value_already_extracted }` Thrown if
+     * the value was already extracted out of the shared state.
      *
      * @throws stored exception if the promise side set an exception.
      */
     decltype(auto)
-    get()
+    get() const
     {
         if (!shared_state_)
             throw future_error{ future_errc::no_state };
@@ -756,6 +790,108 @@ class future
         auto lg = shared_state_->internal_lock();
 
         return shared_state_->get();
+    }
+
+    /// Extract the result.
+    /**
+     * This function moves the result out of the shared state or throws the
+     * exception set by the promise. If it successfully extracts the value,
+     * an exception of `future_error{ future_errc::value_already_extracted }`
+     * will be stored in the shared state.
+     *
+     * @note: This interface requires `T` to be Moveable. You can consider using
+     * @ref get if your type does not meet this requirement.
+     *
+     * @returns T or void if T is void
+     *
+     * @throws `future_error{ future_errc::no_state }` Thrown if future does not
+     * contain a shared state.
+     *
+     * @throws `future_error{ future_errc::unready_future }` Thrown if
+     * promise side has not set a value or an exception yet.
+     *
+     * @throws `future_error{ future_errc::value_already_extracted }` Thrown if
+     * the value was already extracted out of the shared state.
+     *
+     * @throws stored exception if the promise side set an exception.
+     */
+    decltype(auto)
+    extract()
+    {
+        if (!shared_state_)
+            throw future_error{ future_errc::no_state };
+
+        auto lg = shared_state_->internal_lock();
+
+        return shared_state_->extract();
+    }
+
+    /// Starts an asynchronous extract operation on the future.
+    /**
+     * This function initiates an asynchronous wait on the future and either
+     * moves the result out of the shared state or completes with the exception
+     * set by the promise. If it successfully extracts the value,
+     * an exception of `future_error{ future_errc::value_already_extracted }`
+     * will be stored in the shared state.
+     *
+     * @note: This interface requires `T` to be DefaultConstructible and
+     * Moveable. You can consider using @ref async_wait and @ref get if your
+     * type does not meet these requirements.
+     *
+     * For each call to async_extract(), the completion handler will be called
+     * exactly once. The completion handler will be called when:
+     *
+     * @li The promise sets a value.
+     *
+     * @li The promise sets an exception.
+     *
+     * @li The promise goes out of scope and an exception of `future_error{
+     * future_errc::broken_promise }` set automatically.
+     *
+     * @li The future was canceled, in which case the handler
+     * is passed an exception_ptr that contains
+     * system_error{ net::error::operation_aborted }.
+     *
+     * @li The value was already extracted, in which case the handler
+     * is passed an exception_ptr that contains
+     * future_error{ future_errc::value_already_extracted }.
+     *
+     * @param token The completion_token that will be used to produce a
+     * completion handler.
+     */
+    template<
+        typename CompletionToken =
+            net::default_completion_token<Executor>::type>
+    auto
+    async_extract(
+        CompletionToken&& token =
+            typename net::default_completion_token<Executor>::type{})
+    {
+        if (!shared_state_)
+            throw future_error{ future_errc::no_state };
+
+        return boost::asio::
+            async_compose<CompletionToken, void(std::exception_ptr, T)>(
+                [shared_state   = shared_state_,
+                 init = false](auto&& self, error_code ec = {}) mutable
+                {
+                    if (!std::exchange(init, true))
+                        return shared_state->async_wait(std::move(self));
+
+                    if (ec)
+                        return self.complete(
+                            std::make_exception_ptr(system_error(ec)), T{});
+
+                    std::exception_ptr eptr;
+                    T tmp = {};
+                    {
+                        auto lg = shared_state->internal_lock();
+                        eptr = shared_state->try_extract(&tmp);
+                    }
+                    self.complete(eptr, std::move(tmp));
+                },
+                token,
+                shared_state_->get_executor());
     }
 
     /// Creates a shared_future.

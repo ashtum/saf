@@ -91,13 +91,13 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_set_value)
     sh_future_1.async_wait(
         [&](auto ec)
         {
-            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            BOOST_CHECK(!ec);
             invoked = 2;
         });
     sh_future_2.async_wait(
         [&](auto ec)
         {
-            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            BOOST_CHECK(!ec);
             invoked *= 2;
         });
     ctx.run();
@@ -117,13 +117,13 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_set_exception)
     sh_future_1.async_wait(
         [&](auto ec)
         {
-            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            BOOST_CHECK(!ec);
             invoked = 2;
         });
     sh_future_2.async_wait(
         [&](auto ec)
         {
-            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            BOOST_CHECK(!ec);
             invoked *= 2;
         });
     ctx.run();
@@ -148,13 +148,13 @@ BOOST_AUTO_TEST_CASE(async_wait_set_value)
     sh_future_1.async_wait(
         [&](auto ec)
         {
-            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            BOOST_CHECK(!ec);
             num *= 2;
         });
     sh_future_2.async_wait(
         [&](auto ec)
         {
-            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            BOOST_CHECK(!ec);
             num *= 2;
         });
     ctx.post(
@@ -179,13 +179,13 @@ BOOST_AUTO_TEST_CASE(async_wait_set_exception)
     sh_future_1.async_wait(
         [&](auto ec)
         {
-            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            BOOST_CHECK(!ec);
             num *= 2;
         });
     sh_future_2.async_wait(
         [&](auto ec)
         {
-            BOOST_CHECK_EQUAL(ec, boost::system::error_code{});
+            BOOST_CHECK(!ec);
             num *= 2;
         });
     ctx.post(
