@@ -14,8 +14,7 @@ asio::awaitable<void>
 future_getter(saf::future<std::string> future)
 {
     std::cout << "Waiting on the future...\n";
-    co_await future.async_wait();
-    std::cout << "The result: " << future.get() << '\n';
+    std::cout << co_await future.async_extract() << '\n';
 }
 
 asio::awaitable<void>

@@ -15,7 +15,7 @@ future_getter_1(saf::shared_future<std::string> future)
 {
     std::cout << "Waiting on the future...\n";
     co_await future.async_wait();
-    std::cout << "The result: " << future.get() << '\n';
+    std::cout << future.get() << '\n';
 }
 
 asio::awaitable<void>
@@ -23,7 +23,7 @@ future_getter_2(saf::shared_future<std::string> future)
 {
     std::cout << "Waiting on the future...\n";
     co_await future.async_wait();
-    std::cout << "The result: " << future.get() << '\n';
+    std::cout << future.get() << '\n';
 }
 
 asio::awaitable<void>
