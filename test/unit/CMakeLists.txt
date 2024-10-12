@@ -1,4 +1,4 @@
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Wall -Wfatal-errors -Wextra -Wnon-virtual-dtor -pedantic)
 
 add_executable(unit_test main.cpp promise_test.cpp future_test.cpp shared_future_test.cpp)

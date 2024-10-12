@@ -64,5 +64,5 @@ Waiting on the future...
 1
 2
 3
-The result: HOWDY!
+HOWDY!
 ```

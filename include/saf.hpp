@@ -189,7 +189,7 @@ class locking_strategy
     auto
     internal_lock() noexcept
     {
-        return std::lock_guard{ mutex_ };
+        return std::unique_lock{ mutex_ };
     }
 };
 
@@ -394,29 +394,35 @@ class shared_state final
             }
             else
             {
-                return std::move(tmp);
+                return tmp;
             }
         }
 
         std::rethrow_exception(std::get<1>(value_));
     }
 
-    std::exception_ptr
-    try_extract(T* out)
+    auto
+    try_extract()
     {
+        struct pair_t
+        {
+            std::exception_ptr eptr;
+            T value;
+        };
+
         if (auto* p = std::get_if<2>(&value_))
         {
-            *out = std::move(*p);
+            pair_t r{ {}, std::move(*p) };
             value_.template emplace<1>(std::make_exception_ptr(
                 future_error{ future_errc::value_already_extracted }));
-            return {};
+            return r;
         }
 
         if (auto* p = std::get_if<1>(&value_))
-            return *p;
+            return pair_t{ *p, {} };
 
-        return std::make_exception_ptr(
-            future_error{ future_errc::unready_future });
+        return pair_t{ std::make_exception_ptr(
+            future_error{ future_errc::unready_future }), {} };
     }
 
     decltype(auto)
@@ -651,7 +657,7 @@ class shared_future
      */
     template<
         typename CompletionToken =
-            net::default_completion_token<Executor>::type>
+            typename net::default_completion_token<Executor>::type>
     auto
     async_wait(
         CompletionToken&& token =
@@ -861,7 +867,7 @@ class future
      */
     template<
         typename CompletionToken =
-            net::default_completion_token<Executor>::type>
+            typename net::default_completion_token<Executor>::type>
     auto
     async_extract(
         CompletionToken&& token =
@@ -872,8 +878,8 @@ class future
 
         return boost::asio::
             async_compose<CompletionToken, void(std::exception_ptr, T)>(
-                [shared_state   = shared_state_,
-                 init = false](auto&& self, error_code ec = {}) mutable
+                [shared_state = shared_state_,
+                 init         = false](auto&& self, error_code ec = {}) mutable
                 {
                     if (!std::exchange(init, true))
                         return shared_state->async_wait(std::move(self));
@@ -882,13 +888,10 @@ class future
                         return self.complete(
                             std::make_exception_ptr(system_error(ec)), T{});
 
-                    std::exception_ptr eptr;
-                    T tmp = {};
-                    {
-                        auto lg = shared_state->internal_lock();
-                        eptr = shared_state->try_extract(&tmp);
-                    }
-                    self.complete(eptr, std::move(tmp));
+                    auto ul = shared_state->internal_lock();
+                    auto rv = shared_state->try_extract();
+                    ul.unlock();
+                    self.complete(rv.eptr, std::move(rv.value));
                 },
                 token,
                 shared_state_->get_executor());
@@ -937,7 +940,7 @@ class future
      */
     template<
         typename CompletionToken =
-            net::default_completion_token<Executor>::type>
+            typename net::default_completion_token<Executor>::type>
     auto
     async_wait(
         CompletionToken&& token =
