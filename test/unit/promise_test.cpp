@@ -16,11 +16,11 @@ BOOST_AUTO_TEST_CASE(is_valid)
     auto ctx = asio::io_context{};
 
     auto promise = saf::promise<void>{ ctx };
-    BOOST_CHECK(promise.is_valid() == true);
+    BOOST_CHECK(promise.is_valid());
 
     auto promise_2 = std::move(promise);
-    BOOST_CHECK(promise.is_valid() == false);
-    BOOST_CHECK(promise_2.is_valid() == true);
+    BOOST_CHECK(!promise.is_valid());
+    BOOST_CHECK(promise_2.is_valid());
 }
 
 BOOST_AUTO_TEST_CASE(get_future)
@@ -72,7 +72,7 @@ BOOST_AUTO_TEST_CASE(set_value)
             saf::future_error,
             [](const auto& e)
             { return e.code() == saf::future_errc::no_state; });
-        BOOST_CHECK(promise_2.get_future().is_ready() == false);
+        BOOST_CHECK(!promise_2.get_future().is_ready());
     }
 }
 
@@ -100,7 +100,7 @@ BOOST_AUTO_TEST_CASE(set_value_void)
             saf::future_error,
             [](const auto& e)
             { return e.code() == saf::future_errc::no_state; });
-        BOOST_CHECK(promise_2.get_future().is_ready() == false);
+        BOOST_CHECK(!promise_2.get_future().is_ready());
     }
 }
 
@@ -133,7 +133,7 @@ BOOST_AUTO_TEST_CASE(set_exception)
             saf::future_error,
             [](const auto& e)
             { return e.code() == saf::future_errc::no_state; });
-        BOOST_CHECK(promise_2.get_future().is_ready() == false);
+        BOOST_CHECK(!promise_2.get_future().is_ready());
     }
 }
 

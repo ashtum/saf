@@ -16,11 +16,12 @@ BOOST_AUTO_TEST_CASE(is_valid)
     auto ctx = asio::io_context{};
 
     auto future = saf::promise<void>{ ctx }.get_future();
-    BOOST_CHECK(future.is_valid() == true);
+    BOOST_CHECK(future.is_valid());
 
+    // move
     auto future_2 = std::move(future);
-    BOOST_CHECK(future.is_valid() == false);
-    BOOST_CHECK(future_2.is_valid() == true);
+    BOOST_CHECK(!future.is_valid());
+    BOOST_CHECK(future_2.is_valid());
 }
 
 BOOST_AUTO_TEST_CASE(share)
@@ -29,14 +30,14 @@ BOOST_AUTO_TEST_CASE(share)
 
     auto future    = saf::promise<void>{ ctx }.get_future();
     auto sh_future = future.share();
-    BOOST_CHECK(sh_future.is_valid() == true);
-    BOOST_CHECK(future.is_valid() == false);
+    BOOST_CHECK(sh_future.is_valid());
+    BOOST_CHECK(!future.is_valid());
     BOOST_CHECK_EXCEPTION(
         boost::ignore_unused(future.share()),
         saf::future_error,
         [](const auto& e) { return e.code() == saf::future_errc::no_state; });
     auto sh_future_2 = sh_future;
-    BOOST_CHECK(sh_future_2.is_valid() == true);
+    BOOST_CHECK(sh_future_2.is_valid());
 }
 
 BOOST_AUTO_TEST_CASE(get_excecutor)
@@ -60,9 +61,9 @@ BOOST_AUTO_TEST_CASE(is_ready)
     auto promise = saf::promise<void>{ ctx };
     auto future  = promise.get_future();
 
-    BOOST_CHECK(future.is_ready() == false);
+    BOOST_CHECK(!future.is_ready());
     promise.set_value();
-    BOOST_CHECK(future.is_ready() == true);
+    BOOST_CHECK(future.is_ready());
 
     auto future_2 = std::move(future);
     BOOST_CHECK_EXCEPTION(
@@ -136,6 +137,34 @@ BOOST_AUTO_TEST_CASE(extract_already_extracted)
     auto future  = promise.get_future();
     promise.set_value(54);
     BOOST_CHECK_EQUAL(future.extract(), 54);
+    BOOST_CHECK(future.is_ready());
+    BOOST_CHECK_EXCEPTION(
+        future.extract(),
+        saf::future_error,
+        [](const auto& e)
+        { return e.code() == saf::future_errc::value_already_extracted; });
+}
+
+BOOST_AUTO_TEST_CASE(extract_move_only)
+{
+    class move_only
+    {
+      public:
+        move_only(int)
+        {
+        }
+        move_only(const move_only&) = delete;
+        move_only(move_only&&)      = default;
+        move_only&
+        operator=(const move_only&) = delete;
+        move_only&
+        operator=(move_only&&) = delete;
+    };
+    auto ctx     = asio::io_context{};
+    auto promise = saf::promise<move_only>{ ctx };
+    auto future  = promise.get_future();
+    promise.set_value(1);
+    future.extract();
     BOOST_CHECK_EXCEPTION(
         future.extract(),
         saf::future_error,
@@ -175,7 +204,7 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_set_value)
             invoked = true;
         });
     ctx.run();
-    BOOST_CHECK(invoked == true);
+    BOOST_CHECK(invoked);
     BOOST_CHECK_EQUAL(future.get(), 54);
 }
 
@@ -194,7 +223,7 @@ BOOST_AUTO_TEST_CASE(async_extract_pre_set_value)
             invoked = true;
         });
     ctx.run();
-    BOOST_CHECK(invoked == true);
+    BOOST_CHECK(invoked);
     BOOST_CHECK_EXCEPTION(
         future.get(),
         saf::future_error,
@@ -217,7 +246,7 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_extracted)
             invoked = true;
         });
     ctx.run();
-    BOOST_CHECK(invoked == true);
+    BOOST_CHECK(invoked);
     BOOST_CHECK_EXCEPTION(
         future.get(),
         saf::future_error,
@@ -241,12 +270,14 @@ BOOST_AUTO_TEST_CASE(async_extract_pre_extracted)
             BOOST_CHECK_EXCEPTION(
                 std::rethrow_exception(eptr),
                 saf::future_error,
-                [](const auto& e)
-                { return e.code() == saf::future_errc::value_already_extracted; });
+                [](const auto& e) {
+                    return e.code() ==
+                           saf::future_errc::value_already_extracted;
+                });
             invoked = true;
         });
     ctx.run();
-    BOOST_CHECK(invoked == true);
+    BOOST_CHECK(invoked);
     BOOST_CHECK_EXCEPTION(
         future.get(),
         saf::future_error,
@@ -268,7 +299,7 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_set_exception)
             invoked = true;
         });
     ctx.run();
-    BOOST_CHECK(invoked == true);
+    BOOST_CHECK(invoked);
     BOOST_CHECK_EXCEPTION(
         future.get(),
         std::runtime_error,
@@ -294,7 +325,7 @@ BOOST_AUTO_TEST_CASE(async_extract_pre_set_exception)
             invoked = true;
         });
     ctx.run();
-    BOOST_CHECK(invoked == true);
+    BOOST_CHECK(invoked);
     BOOST_CHECK_EXCEPTION(
         future.get(),
         std::runtime_error,
@@ -411,6 +442,47 @@ BOOST_AUTO_TEST_CASE(async_extract_set_exception)
         [](const auto& e) { return std::string{ e.what() } == "OPS"; });
 }
 
+BOOST_AUTO_TEST_CASE(async_extract_move_only)
+{
+    class move_only
+    {
+      public:
+        move_only() = default; // necessary for async interface
+        move_only(int)
+        {
+        }
+        move_only(const move_only&) = delete;
+        move_only(move_only&&)      = default;
+        move_only&
+        operator=(const move_only&) = delete;
+        move_only&
+        operator=(move_only&&) = delete;
+    };
+    auto ctx     = asio::io_context{};
+    auto promise = saf::promise<move_only>{ ctx };
+    auto future  = promise.get_future();
+    int num      = 0;
+    future.async_extract(
+        [&](auto eptr, move_only)
+        {
+            BOOST_CHECK(!eptr);
+            num *= 2;
+        });
+    ctx.post(
+        [&]
+        {
+            num = 2;
+            promise.set_value(1);
+        });
+    ctx.run();
+    BOOST_CHECK_EQUAL(num, 4);
+    BOOST_CHECK_EXCEPTION(
+        future.get(),
+        saf::future_error,
+        [](const auto& e)
+        { return e.code() == saf::future_errc::value_already_extracted; });
+}
+
 BOOST_AUTO_TEST_CASE(async_wait_cancellation)
 {
     auto ctx     = asio::io_context{};
@@ -427,8 +499,8 @@ BOOST_AUTO_TEST_CASE(async_wait_cancellation)
         }));
     cs.emit(asio::cancellation_type::terminal);
     ctx.run();
-    BOOST_CHECK(invoked == true);
-    BOOST_CHECK(future.is_ready() == false);
+    BOOST_CHECK(invoked);
+    BOOST_CHECK(!future.is_ready());
 }
 
 BOOST_AUTO_TEST_CASE(async_extract_cancellation)
@@ -453,8 +525,8 @@ BOOST_AUTO_TEST_CASE(async_extract_cancellation)
         }));
     cs.emit(asio::cancellation_type::terminal);
     ctx.run();
-    BOOST_CHECK(invoked == true);
-    BOOST_CHECK(future.is_ready() == false);
+    BOOST_CHECK(invoked);
+    BOOST_CHECK(!future.is_ready());
 }
 
 BOOST_AUTO_TEST_CASE(async_wait_cancel_already_completed)
@@ -475,7 +547,7 @@ BOOST_AUTO_TEST_CASE(async_wait_cancel_already_completed)
     cs.emit(asio::cancellation_type::terminal);
     ctx.run();
     BOOST_CHECK_EQUAL(invoked, 1);
-    BOOST_CHECK(future.is_ready() == true);
+    BOOST_CHECK(future.is_ready());
 }
 
 BOOST_AUTO_TEST_CASE(async_extract_cancel_already_completed)
@@ -528,7 +600,7 @@ BOOST_AUTO_TEST_CASE(async_extract_shutdown)
         promise     = saf::promise<int>{ ctx };
         auto future = promise.get_future();
         BOOST_CHECK_EQUAL(obj.use_count(), 1);
-        future.async_extract([obj](auto,auto) {});
+        future.async_extract([obj](auto, auto) {});
         BOOST_CHECK_EQUAL(obj.use_count(), 2);
     }
     BOOST_CHECK_EQUAL(obj.use_count(), 1);

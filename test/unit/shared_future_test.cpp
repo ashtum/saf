@@ -16,14 +16,21 @@ BOOST_AUTO_TEST_CASE(is_valid)
     auto ctx = asio::io_context{};
 
     auto sh_future = saf::promise<void>{ ctx }.get_future().share();
-    BOOST_CHECK(sh_future.is_valid() == true);
+    BOOST_CHECK(sh_future.is_valid());
 
+    // copy
     auto sh_future_2 = sh_future;
-    BOOST_CHECK(sh_future.is_valid() == true);
-    BOOST_CHECK(sh_future_2.is_valid() == true);
+    BOOST_CHECK(sh_future.is_valid());
+    BOOST_CHECK(sh_future_2.is_valid());
 
-    auto sh_future_3 = saf::shared_future<void>{};
-    BOOST_CHECK(sh_future_3.is_valid() == false);
+    // move
+    auto sh_future_3 = std::move(sh_future_2);
+    BOOST_CHECK(!sh_future_2.is_valid());
+    BOOST_CHECK(sh_future_3.is_valid());
+
+    // default-constructor
+    auto sh_future_4 = saf::shared_future<void>{};
+    BOOST_CHECK(!sh_future_4.is_valid());
 }
 
 BOOST_AUTO_TEST_CASE(get_excecutor)
@@ -47,9 +54,9 @@ BOOST_AUTO_TEST_CASE(is_ready)
     auto promise   = saf::promise<void>{ ctx };
     auto sh_future = promise.get_future().share();
 
-    BOOST_CHECK(sh_future.is_ready() == false);
+    BOOST_CHECK(!sh_future.is_ready());
     promise.set_value();
-    BOOST_CHECK(sh_future.is_ready() == true);
+    BOOST_CHECK(sh_future.is_ready());
 
     auto sh_future_2 = std::move(sh_future);
     BOOST_CHECK_EXCEPTION(
