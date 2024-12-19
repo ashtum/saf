@@ -876,7 +876,7 @@ class future
         if (!shared_state_)
             throw future_error{ future_errc::no_state };
 
-        return boost::asio::
+        return net::
             async_compose<CompletionToken, void(std::exception_ptr, T)>(
                 [shared_state = shared_state_,
                  init         = false](auto&& self, error_code ec = {}) mutable
