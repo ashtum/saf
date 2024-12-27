@@ -270,7 +270,8 @@ BOOST_AUTO_TEST_CASE(async_extract_pre_extracted)
             BOOST_CHECK_EXCEPTION(
                 std::rethrow_exception(eptr),
                 saf::future_error,
-                [](const auto& e) {
+                [](const auto& e)
+                {
                     return e.code() ==
                            saf::future_errc::value_already_extracted;
                 });
@@ -344,7 +345,8 @@ BOOST_AUTO_TEST_CASE(async_wait_set_value)
             BOOST_CHECK(!ec);
             num *= 2;
         });
-    ctx.post(
+    asio::post(
+        ctx,
         [&]
         {
             num = 2;
@@ -368,11 +370,40 @@ BOOST_AUTO_TEST_CASE(async_extract_set_value)
             BOOST_CHECK_EQUAL(value, 54);
             num *= 2;
         });
-    ctx.post(
+    asio::post(
+        ctx,
         [&]
         {
             num = 2;
             promise.set_value(54);
+        });
+    ctx.run();
+    BOOST_CHECK_EQUAL(num, 4);
+    BOOST_CHECK_EXCEPTION(
+        future.get(),
+        saf::future_error,
+        [](const auto& e)
+        { return e.code() == saf::future_errc::value_already_extracted; });
+}
+
+BOOST_AUTO_TEST_CASE(async_extract_set_value_void)
+{
+    auto ctx     = asio::io_context{};
+    auto promise = saf::promise<void>{ ctx };
+    auto future  = promise.get_future();
+    int num      = 0;
+    future.async_extract(
+        [&](auto eptr)
+        {
+            BOOST_CHECK(!eptr);
+            num *= 2;
+        });
+    asio::post(
+        ctx,
+        [&]
+        {
+            num = 2;
+            promise.set_value();
         });
     ctx.run();
     BOOST_CHECK_EQUAL(num, 4);
@@ -395,7 +426,8 @@ BOOST_AUTO_TEST_CASE(async_wait_set_exception)
             BOOST_CHECK(!ec);
             num *= 2;
         });
-    ctx.post(
+    asio::post(
+        ctx,
         [&]
         {
             num = 2;
@@ -427,7 +459,40 @@ BOOST_AUTO_TEST_CASE(async_extract_set_exception)
                 [](const auto& e) { return std::string{ e.what() } == "OPS"; });
             num *= 2;
         });
-    ctx.post(
+    asio::post(
+        ctx,
+        [&]
+        {
+            num = 2;
+            promise.set_exception(
+                std::make_exception_ptr(std::runtime_error{ "OPS" }));
+        });
+    ctx.run();
+    BOOST_CHECK_EQUAL(num, 4);
+    BOOST_CHECK_EXCEPTION(
+        future.get(),
+        std::runtime_error,
+        [](const auto& e) { return std::string{ e.what() } == "OPS"; });
+}
+
+BOOST_AUTO_TEST_CASE(async_extract_set_exception_void)
+{
+    auto ctx     = asio::io_context{};
+    auto promise = saf::promise<void>{ ctx };
+    auto future  = promise.get_future();
+    int num      = 0;
+    future.async_extract(
+        [&](auto eptr)
+        {
+            BOOST_CHECK(eptr);
+            BOOST_CHECK_EXCEPTION(
+                std::rethrow_exception(eptr),
+                std::runtime_error,
+                [](const auto& e) { return std::string{ e.what() } == "OPS"; });
+            num *= 2;
+        });
+    asio::post(
+        ctx,
         [&]
         {
             num = 2;
@@ -468,7 +533,8 @@ BOOST_AUTO_TEST_CASE(async_extract_move_only)
             BOOST_CHECK(!eptr);
             num *= 2;
         });
-    ctx.post(
+    asio::post(
+        ctx,
         [&]
         {
             num = 2;
@@ -490,13 +556,14 @@ BOOST_AUTO_TEST_CASE(async_wait_cancellation)
     auto future  = promise.get_future();
     auto invoked = false;
     auto cs      = asio::cancellation_signal{};
-    future.async_wait(asio::bind_cancellation_slot(
-        cs.slot(),
-        [&](auto ec)
-        {
-            BOOST_CHECK_EQUAL(ec, asio::error::operation_aborted);
-            invoked = true;
-        }));
+    future.async_wait(
+        asio::bind_cancellation_slot(
+            cs.slot(),
+            [&](auto ec)
+            {
+                BOOST_CHECK_EQUAL(ec, asio::error::operation_aborted);
+                invoked = true;
+            }));
     cs.emit(asio::cancellation_type::terminal);
     ctx.run();
     BOOST_CHECK(invoked);
@@ -510,19 +577,46 @@ BOOST_AUTO_TEST_CASE(async_extract_cancellation)
     auto future  = promise.get_future();
     auto invoked = false;
     auto cs      = asio::cancellation_signal{};
-    future.async_extract(asio::bind_cancellation_slot(
-        cs.slot(),
-        [&](auto eptr, auto value)
-        {
-            BOOST_CHECK(eptr);
-            BOOST_CHECK_EQUAL(value, int{});
-            BOOST_CHECK_EXCEPTION(
-                std::rethrow_exception(eptr),
-                saf::system_error,
-                [](const auto& e)
-                { return e.code() == asio::error::operation_aborted; });
-            invoked = true;
-        }));
+    future.async_extract(
+        asio::bind_cancellation_slot(
+            cs.slot(),
+            [&](auto eptr, auto value)
+            {
+                BOOST_CHECK(eptr);
+                BOOST_CHECK_EQUAL(value, int{});
+                BOOST_CHECK_EXCEPTION(
+                    std::rethrow_exception(eptr),
+                    saf::system_error,
+                    [](const auto& e)
+                    { return e.code() == asio::error::operation_aborted; });
+                invoked = true;
+            }));
+    cs.emit(asio::cancellation_type::terminal);
+    ctx.run();
+    BOOST_CHECK(invoked);
+    BOOST_CHECK(!future.is_ready());
+}
+
+BOOST_AUTO_TEST_CASE(async_extract_cancellation_void)
+{
+    auto ctx     = asio::io_context{};
+    auto promise = saf::promise<void>{ ctx };
+    auto future  = promise.get_future();
+    auto invoked = false;
+    auto cs      = asio::cancellation_signal{};
+    future.async_extract(
+        asio::bind_cancellation_slot(
+            cs.slot(),
+            [&](auto eptr)
+            {
+                BOOST_CHECK(eptr);
+                BOOST_CHECK_EXCEPTION(
+                    std::rethrow_exception(eptr),
+                    saf::system_error,
+                    [](const auto& e)
+                    { return e.code() == asio::error::operation_aborted; });
+                invoked = true;
+            }));
     cs.emit(asio::cancellation_type::terminal);
     ctx.run();
     BOOST_CHECK(invoked);
@@ -536,13 +630,14 @@ BOOST_AUTO_TEST_CASE(async_wait_cancel_already_completed)
     auto future  = promise.get_future();
     auto invoked = 0;
     auto cs      = asio::cancellation_signal{};
-    future.async_wait(asio::bind_cancellation_slot(
-        cs.slot(),
-        [&](auto ec)
-        {
-            BOOST_CHECK(!ec);
-            invoked += 1;
-        }));
+    future.async_wait(
+        asio::bind_cancellation_slot(
+            cs.slot(),
+            [&](auto ec)
+            {
+                BOOST_CHECK(!ec);
+                invoked += 1;
+            }));
     promise.set_value();
     cs.emit(asio::cancellation_type::terminal);
     ctx.run();
@@ -557,14 +652,41 @@ BOOST_AUTO_TEST_CASE(async_extract_cancel_already_completed)
     auto future  = promise.get_future();
     auto invoked = 0;
     auto cs      = asio::cancellation_signal{};
-    future.async_extract(asio::bind_cancellation_slot(
-        cs.slot(),
-        [&](auto eptr, auto value)
-        {
-            BOOST_CHECK(!eptr);
-            BOOST_CHECK_EQUAL(value, int{});
-            invoked += 1;
-        }));
+    future.async_extract(
+        asio::bind_cancellation_slot(
+            cs.slot(),
+            [&](auto eptr, auto value)
+            {
+                BOOST_CHECK(!eptr);
+                BOOST_CHECK_EQUAL(value, int{});
+                invoked += 1;
+            }));
+    promise.set_value();
+    cs.emit(asio::cancellation_type::terminal);
+    ctx.run();
+    BOOST_CHECK_EQUAL(invoked, 1);
+    BOOST_CHECK_EXCEPTION(
+        future.get(),
+        saf::future_error,
+        [](const auto& e)
+        { return e.code() == saf::future_errc::value_already_extracted; });
+}
+
+BOOST_AUTO_TEST_CASE(async_extract_cancel_already_completed_void)
+{
+    auto ctx     = asio::io_context{};
+    auto promise = saf::promise<void>{ ctx };
+    auto future  = promise.get_future();
+    auto invoked = 0;
+    auto cs      = asio::cancellation_signal{};
+    future.async_extract(
+        asio::bind_cancellation_slot(
+            cs.slot(),
+            [&](auto eptr)
+            {
+                BOOST_CHECK(!eptr);
+                invoked += 1;
+            }));
     promise.set_value();
     cs.emit(asio::cancellation_type::terminal);
     ctx.run();

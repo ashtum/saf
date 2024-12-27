@@ -407,7 +407,7 @@ class shared_state final
         struct pair_t
         {
             std::exception_ptr eptr;
-            T value;
+            std::conditional_t<std::is_void_v<T>, std::monostate, T> value;
         };
 
         if (auto* p = std::get_if<2>(&value_))
@@ -511,6 +511,68 @@ class shared_state final
             static_cast<wait_op*>(nx)->shutdown();
     }
 };
+
+template<typename T, typename Executor, bool CC>
+class async_extract_op
+{
+    std::shared_ptr<shared_state<T, Executor, CC>> shared_state_;
+    bool init_ = false;
+
+  public:
+    async_extract_op(decltype(shared_state_) shared_state)
+        : shared_state_{ std::move(shared_state) }
+    {
+    }
+
+    template<typename Self>
+    void
+    operator()(Self&& self, error_code ec = {})
+    {
+
+        if (!std::exchange(init_, true))
+            return shared_state_->async_wait(std::move(self));
+
+        if (ec)
+        {
+            if constexpr (std::is_same_v<T, void>)
+            {
+                return self.complete(std::make_exception_ptr(system_error(ec)));
+            }
+            else
+            {
+                return self.complete(
+                    std::make_exception_ptr(system_error(ec)), T{});
+            }
+        }
+
+        auto ul = shared_state_->internal_lock();
+        auto rv = shared_state_->try_extract();
+        ul.unlock();
+        if constexpr (std::is_same_v<T, void>)
+        {
+            self.complete(rv.eptr);
+        }
+        else
+        {
+            self.complete(rv.eptr, std::move(rv.value));
+        }
+    }
+};
+
+template<typename T>
+struct async_extract_signature
+{
+    using type = void(std::exception_ptr, T);
+};
+
+template<>
+struct async_extract_signature<void>
+{
+    using type = void(std::exception_ptr);
+};
+
+template<typename T>
+using async_extract_signature_t = typename async_extract_signature<T>::type;
 
 /// Provides shared access to the result of asynchronous operations
 /**
@@ -659,9 +721,7 @@ class shared_future
         typename CompletionToken =
             typename net::default_completion_token<Executor>::type>
     auto
-    async_wait(
-        CompletionToken&& token =
-            typename net::default_completion_token<Executor>::type{})
+    async_wait(CompletionToken&& token = CompletionToken{})
     {
         if (!shared_state_)
             throw future_error{ future_errc::no_state };
@@ -869,30 +929,14 @@ class future
         typename CompletionToken =
             typename net::default_completion_token<Executor>::type>
     auto
-    async_extract(
-        CompletionToken&& token =
-            typename net::default_completion_token<Executor>::type{})
+    async_extract(CompletionToken&& token = CompletionToken{})
     {
         if (!shared_state_)
             throw future_error{ future_errc::no_state };
 
         return net::
-            async_compose<CompletionToken, void(std::exception_ptr, T)>(
-                [shared_state = shared_state_,
-                 init         = false](auto&& self, error_code ec = {}) mutable
-                {
-                    if (!std::exchange(init, true))
-                        return shared_state->async_wait(std::move(self));
-
-                    if (ec)
-                        return self.complete(
-                            std::make_exception_ptr(system_error(ec)), T{});
-
-                    auto ul = shared_state->internal_lock();
-                    auto rv = shared_state->try_extract();
-                    ul.unlock();
-                    self.complete(rv.eptr, std::move(rv.value));
-                },
+            async_compose<CompletionToken, async_extract_signature_t<T>>(
+                async_extract_op<T, Executor, CC>{ shared_state_ },
                 token,
                 shared_state_->get_executor());
     }
@@ -942,9 +986,7 @@ class future
         typename CompletionToken =
             typename net::default_completion_token<Executor>::type>
     auto
-    async_wait(
-        CompletionToken&& token =
-            typename net::default_completion_token<Executor>::type{})
+    async_wait(CompletionToken&& token = CompletionToken{})
     {
         if (!shared_state_)
             throw future_error{ future_errc::no_state };
