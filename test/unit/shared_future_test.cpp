@@ -164,7 +164,8 @@ BOOST_AUTO_TEST_CASE(async_wait_set_value)
             BOOST_CHECK(!ec);
             num *= 2;
         });
-    ctx.post(
+    asio::post(
+        ctx,
         [&]
         {
             num = 2;
@@ -195,7 +196,8 @@ BOOST_AUTO_TEST_CASE(async_wait_set_exception)
             BOOST_CHECK(!ec);
             num *= 2;
         });
-    ctx.post(
+    asio::post(
+        ctx,
         [&]
         {
             num = 2;
