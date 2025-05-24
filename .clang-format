@@ -8,4 +8,12 @@ AlwaysBreakAfterReturnType: All
 AllowShortFunctionsOnASingleLine: false
 BreakBeforeBraces: Allman
 AlignAfterOpenBracket: AlwaysBreak
-AlignConsecutiveAssignments: true
+AlignConsecutiveAssignments:
+  Enabled: true
+  AlignCompound: true
+SpaceBeforeParens: Never
+AlignOperands: false
+IndentAccessModifiers: false
+AccessModifierOffset: -4
+IndentCaseLabels: false
+AllowShortLambdasOnASingleLine: Inline
