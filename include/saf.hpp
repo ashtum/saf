@@ -13,6 +13,7 @@
 #include <asio/associated_cancellation_slot.hpp>
 #include <asio/compose.hpp>
 #include <asio/default_completion_token.hpp>
+#include <asio/immediate.hpp>
 #include <asio/post.hpp>
 namespace saf
 {
@@ -26,6 +27,7 @@ using system_error = std::system_error;
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/compose.hpp>
 #include <boost/asio/default_completion_token.hpp>
+#include <boost/asio/immediate.hpp>
 #include <boost/asio/post.hpp>
 namespace saf
 {
@@ -326,6 +328,8 @@ class shared_state final
         value_;
 
   public:
+    typedef Executor executor_type;
+
     explicit shared_state(Executor executor)
         : executor_{ std::move(executor) }
         , service_{ &net::use_service<service<CC>>(
@@ -342,7 +346,7 @@ class shared_state final
     shared_state&
     operator=(shared_state&&) = delete;
 
-    [[nodiscard]] Executor
+    [[nodiscard]] executor_type
     get_executor() const
     {
         return executor_;
@@ -446,45 +450,71 @@ class shared_state final
         std::rethrow_exception(std::get<1>(value_));
     }
 
+    class initiate_async_wait
+    {
+        shared_state& shared_state_;
+
+    public:
+        typedef typename shared_state::executor_type executor_type;
+
+        explicit initiate_async_wait(shared_state& shared_state)
+            : shared_state_{ shared_state }
+        {
+        }
+
+        executor_type
+        get_executor() const noexcept
+        {
+            return shared_state_.get_executor();
+        }
+
+        template<typename WaitHandler>
+        void
+        operator()(WaitHandler&& handler) const
+        {
+            auto lg = shared_state_.internal_lock();
+            auto exec =
+                get_associated_executor(handler, shared_state_.get_executor());
+
+            if (shared_state_.is_ready())
+            {
+                lg.unlock();
+                return net::async_immediate(
+                    exec,
+                    net::append(std::move(handler), error_code{}));
+            }
+
+            using handler_type = std::decay_t<decltype(handler)>;
+            using model_type   = wait_op_model<decltype(exec), handler_type>;
+            model_type* model  = model_type ::construct(
+                std::move(exec), std::forward<decltype(handler)>(handler));
+            auto c_slot = model->get_cancellation_slot();
+            if (c_slot.is_connected())
+            {
+                c_slot.assign(
+                    [&shared_state = shared_state_, c_slot, model](
+                        net::cancellation_type type)
+                    {
+                        if (type != net::cancellation_type::none)
+                        {
+                            auto lg = shared_state.internal_lock();
+                            // already completed
+                            if (!c_slot.is_connected())
+                                return;
+                            model->complete(net::error::operation_aborted);
+                        }
+                    });
+            }
+            model->link_before(&shared_state_.waiters_);
+        }
+    };
+
     template<typename CompletionToken>
     auto
     async_wait(CompletionToken&& token)
     {
         return net::async_initiate<decltype(token), void(error_code)>(
-            [this](auto handler)
-            {
-                auto exec = get_associated_executor(handler, executor_);
-
-                auto lg = this->internal_lock();
-
-                if (is_ready())
-                    return net::post(
-                        std::move(exec),
-                        net::append(std::move(handler), error_code{}));
-
-                using handler_type = std::decay_t<decltype(handler)>;
-                using model_type  = wait_op_model<decltype(exec), handler_type>;
-                model_type* model = model_type ::construct(
-                    std::move(exec), std::forward<decltype(handler)>(handler));
-                auto c_slot = model->get_cancellation_slot();
-                if (c_slot.is_connected())
-                {
-                    c_slot.assign(
-                        [this, c_slot, model](net::cancellation_type type)
-                        {
-                            if (type != net::cancellation_type::none)
-                            {
-                                auto lg = this->internal_lock();
-                                // already completed
-                                if (!c_slot.is_connected())
-                                    return;
-                                model->complete(net::error::operation_aborted);
-                            }
-                        });
-                }
-                model->link_before(&waiters_);
-            },
-            token);
+            initiate_async_wait(*this), token);
     }
 
     void

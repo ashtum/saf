@@ -254,6 +254,39 @@ BOOST_AUTO_TEST_CASE(async_wait_pre_extracted)
         { return e.code() == saf::future_errc::value_already_extracted; });
 }
 
+BOOST_AUTO_TEST_CASE(async_wait_immediate_executor)
+{
+    auto ctx = asio::io_context{};
+    asio::post(
+        ctx,
+        [&ctx]()
+        {
+            auto promise = saf::promise<int>{ ctx };
+            auto future  = promise.get_future();
+            promise.set_value(54);
+            BOOST_CHECK_EQUAL(future.extract(), 54);
+            auto invoked = false;
+            future.async_wait(
+                asio::bind_immediate_executor(
+                    ctx.get_executor(),
+                    [&](auto ec)
+                    {
+                        BOOST_CHECK(!ec);
+                        invoked = true;
+                    }));
+            BOOST_CHECK(invoked);
+            BOOST_CHECK_EXCEPTION(
+                future.get(),
+                saf::future_error,
+                [](const auto& e)
+                {
+                    return e.code() ==
+                        saf::future_errc::value_already_extracted;
+                });
+        });
+    ctx.run_one();
+}
+
 BOOST_AUTO_TEST_CASE(async_extract_pre_extracted)
 {
     auto ctx     = asio::io_context{};
